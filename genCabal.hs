@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack --resolver=lts-3.14 --install-ghc runghc --package=cartel
+-- stack --resolver=lts-5.1 --install-ghc runghc --package=cartel
 
 module Main where
 

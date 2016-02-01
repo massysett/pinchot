@@ -1,5 +1,5 @@
 #!/bin/sh
 
 mv stack.yaml stack-old.yaml
-stack --resolver=lts-3.14 runghc genCabal.hs --package cartel --install-ghc > pinchot.cabal
+stack genCabal.hs > pinchot.cabal
 mv stack-old.yaml stack.yaml
