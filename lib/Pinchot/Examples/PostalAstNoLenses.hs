@@ -1,6 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE TypeFamilies #-}
 -- | Provides an example of 'ruleTreeToTypes', but unlike
 -- "Pinchot.Examples.PostalAstAllRules", does not make optics.
 

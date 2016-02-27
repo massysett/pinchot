@@ -14,6 +14,9 @@
 -- "Pinchot.Examples.PostalAstRuleTree" shows you how to use
 -- 'ruleTreeToTypes' and 'earleyGrammar'.
 --
+-- "Pinchot.Examples.AllEarleyGrammars" shows you how to use
+-- 'allEarleyGrammars'.
+--
 -- Three executables are included in the @pinchot@ package.  To get
 -- them, compile @pinchot@ with the @executables@ Cabal flag.
 --

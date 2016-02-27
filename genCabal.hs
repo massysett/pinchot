@@ -34,8 +34,7 @@ lens = atleast "lens" [4,13]
 
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
-  [ ghcOptions ["-Wall"]
-  , otherExtensions ["TemplateHaskell"]
+  [ otherExtensions ["TemplateHaskell"]
   , haskell2010
   , hsSourceDirs ["lib"]
   ]

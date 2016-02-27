@@ -11,7 +11,7 @@ module Pinchot.Examples.PostalAstAllRules where
 import Pinchot
 import Pinchot.Examples.Postal
 
--- Earley is imported only for the type signature for 'myParser'.  The
+-- Earley is imported only for the type signature for 'postalGrammar'.  The
 -- Template Haskell does not need the import.
 import Text.Earley (Grammar, Prod)
 

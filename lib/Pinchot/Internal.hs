@@ -28,8 +28,8 @@ import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 import Language.Haskell.TH
   (ExpQ, ConQ, normalC, mkName, strictType, notStrict, newtypeD,
-   cxt, conT, Name, dataD, appT, DecsQ, appE, Q, Stmt(NoBindS), uInfixE, bindS,
-   varE, varP, conE, Pat, Exp(AppE, DoE), lamE, recC, varStrictType, dyn)
+   cxt, conT, Name, dataD, appT, DecsQ, appE, Q, uInfixE, bindS,
+   varE, varP, conE, Pat, Exp, lamE, recC, varStrictType, dyn)
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as Syntax
 import Text.Earley (satisfy, rule, symbol)
@@ -457,7 +457,7 @@ thRule doLenses typeName derives (Rule nm _ ruleType) = do
   ty <- makeType typeName derives nm ruleType
   lenses <- if doLenses then ruleToOptics typeName nm ruleType
     else return []
-  inst <- productionInstance typeName nm ruleType
+  inst <- productionDecl nm ruleType
   return (ty : inst : lenses)
 
 
@@ -871,7 +871,13 @@ type MakeOptics = Bool
 
 -- | Creates optics.
 --
--- pragma at the top of the module in which you splice this in.
+-- If you use this option, you will need
+-- @
+-- \{\-\# LANGUAGE TypeFamilies \#\-\}
+-- @
+--
+-- at the top of the module into which you splice in the
+-- declarations, because you will get instances of 'Lens.Wrapped'.
 --
 -- Creates the listed optics for each kind of
 -- 'Rule', as follows:
@@ -924,6 +930,10 @@ noOptics = False
 -- declarations, each of which is an appropriate @data@ or @newtype@.
 -- For an example use of 'allRulesToTypes', see
 -- "Pinchot.Examples.PostalAstAllRules".
+--
+-- Also creates bindings whose names are prefixed with @t'@.  Each
+-- of these is a function that, when given a particular production,
+-- reduces it to a sequence of terminal symbols.
 
 allRulesToTypes
   :: Syntax.Lift t
@@ -950,6 +960,10 @@ allRulesToTypes doOptics typeName derives pinchot = case ei of
 
 -- | Creates data types only for the 'Rule' returned from the 'Pinchot', and
 -- for its ancestors.
+--
+-- Also creates bindings whose names are prefixed with @t'@.  Each
+-- of these is a function that, when given a particular production,
+-- reduces it to a sequence of terminal symbols.
 ruleTreeToTypes
   :: Syntax.Lift t
   => MakeOptics
@@ -989,25 +1003,21 @@ ruleToParser
   => String
   -- ^ Module prefix
   -> Rule t
-  -> Q [Stmt]
+  -> [TH.StmtQ]
 ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
-  RTerminal ivls -> do
-    topRule <- makeRule expression
-    return [topRule]
+  RTerminal ivls -> [makeRule expression]
     where
       expression = [| fmap $constructor (satisfy (inIntervals ivls)) |]
 
-  RBranch (b1, bs) -> do
-    topRule <- makeRule expression
-    return [topRule]
+  RBranch (b1, bs) -> [makeRule expression]
     where
       expression = foldl addBranch (branchToParser prefix b1) bs
         where
           addBranch tree branch =
             [| $tree <|> $(branchToParser prefix branch) |]
 
-  RUnion (Rule r1 _ _, rs) -> fmap (:[]) (makeRule expression)
+  RUnion (Rule r1 _ _, rs) -> [makeRule expression]
     where
       expression = foldl adder start rs
         where
@@ -1017,50 +1027,45 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
           start = branch r1
           adder soFar (Rule r _ _) = [| $soFar <|> $(branch r) |]
 
-  RSeqTerm sq -> do
-    let nestRule = bindS (varP helper) [| rule $(foldl addTerm start sq) |]
-          where
-            start = [|pure Seq.empty|]
-            addTerm acc x = [| liftA2 (<|) (symbol x) $acc |]
-    nest <- nestRule
-    topRule <- makeRule (wrapper helper)
-    return [nest, topRule]
+  RSeqTerm sq -> [nestRule, topRule]
+    where
+      nestRule = bindS (varP helper) [| rule $(foldl addTerm start sq) |]
+        where
+          start = [|pure Seq.empty|]
+          addTerm acc x = [| liftA2 (<|) (symbol x) $acc |]
+      topRule = makeRule (wrapper helper)
 
-  ROptional (Rule innerNm _ _) -> fmap (:[]) (makeRule expression)
+  ROptional (Rule innerNm _ _) -> [makeRule expression]
     where
       expression = [| fmap $constructor (pure Nothing <|> $(just)) |]
         where
           just = [| fmap Just $(varE (ruleName innerNm)) |]
 
-  RList (Rule innerNm _ _) -> do
-    let nestRule = bindS (varP helper) ([|rule|] `appE` parseSeq)
-          where
-            parseSeq = uInfixE [|pure Seq.empty|] [|(<|>)|] pSeq
-              where
-                pSeq = [|liftA2 (<|) $(varE (ruleName innerNm)) $(varE helper) |]
-    nest <- nestRule
-    top <- makeRule $ wrapper helper
-    return [nest, top]
+  RList (Rule innerNm _ _) -> [nestRule, makeRule (wrapper helper)]
+    where
+      nestRule = bindS (varP helper) ([|rule|] `appE` parseSeq)
+        where
+          parseSeq = uInfixE [|pure Seq.empty|] [|(<|>)|] pSeq
+            where
+              pSeq = [|liftA2 (<|) $(varE (ruleName innerNm)) $(varE helper) |]
 
-  RList1 (Rule innerNm _ _) -> do
-    let nestRule = bindS (varP helper) [|rule $(parseSeq)|]
-          where
-            parseSeq = [| pure Seq.empty <|> $pSeq |]
-              where
-                pSeq = [| (<|) <$> $(varE (ruleName innerNm))
-                               <*> $(varE helper) |]
-    nest <- nestRule
-    let topExpn = [| $constructor <$> ( (,) <$> $(varE (ruleName innerNm))
+  RList1 (Rule innerNm _ _) -> [nestRule, makeRule topExpn]
+    where
+      nestRule = bindS (varP helper) [|rule $(parseSeq)|]
+        where
+          parseSeq = [| pure Seq.empty <|> $pSeq |]
+            where
+              pSeq = [| (<|) <$> $(varE (ruleName innerNm))
+                             <*> $(varE helper) |]
+      topExpn = [| $constructor <$> ( (,) <$> $(varE (ruleName innerNm))
                                         <*> $(varE helper)
-                                      ) |]
-    top <- makeRule topExpn
-    return [nest, top]
+                                    ) |]
 
-  RWrap (Rule innerNm _ _) -> fmap (:[]) (makeRule expression)
+  RWrap (Rule innerNm _ _) -> [makeRule expression]
     where
       expression = [|fmap $constructor $(varE (ruleName innerNm)) |]
 
-  RRecord sq -> fmap (:[]) (makeRule expression)
+  RRecord sq -> [makeRule expression]
     where
       expression = case viewl sq of
         EmptyL -> [| pure $constructor |]
@@ -1199,11 +1204,11 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = [| fmap fst (mfix $lamb) |]
   where
     neededRules = ruleAndAncestors r
     otherNames = rulesDemandedBeforeDefined neededRules
-    expression = do
-      stmts <- fmap concat . mapM (ruleToParser prefix)
-        . toList $ neededRules
-      let result = bigTuple (ruleName top) otherNames
-      TH.doE (fmap return stmts ++ [TH.noBindS ([|return|] `appE` result)])
+    expression =
+      let stmts = concatMap (ruleToParser prefix)
+            . toList $ neededRules
+          result = bigTuple (ruleName top) otherNames
+      in TH.doE (stmts ++ [TH.noBindS ([|return|] `appE` result)])
     lamb = lamE [lazyPattern otherNames] expression
 
 -- | Creates an Earley grammar for each 'Rule' created in a
@@ -1228,12 +1233,11 @@ allEarleyGrammars
   -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
   -- @\"MyLibrary.MyAst\"@ here.
   --
-  -- For an example where the types are in the same module, see
-  -- "Pinchot.Examples.PostalAstRuleTree" or
-  -- "Pinchot.Examples.PostalAstAllRules".
+  -- This argument is similar to that for 'earleyGrammar' so
+  -- the examples there might be useful.
   --
-  -- For an example using a qualified import, see
-  -- "Pinchot.Examples.QualifiedImport".
+  -- For an example using this function, please see
+  -- "Pinchot.Examples.AllEarleyGrammars".
 
   -> Pinchot t a
   -- ^ Creates an Earley grammar for each 'Rule' created in the
@@ -1258,97 +1262,102 @@ allEarleyGrammars
   --
   -- where TYPE_NAME is the name of the type defined in the
   -- corresponding 'Rule'.
-allEarleyGrammars = undefined
+allEarleyGrammars prefix pinc = case ei of
+  Left err -> fail $ "pinchot: bad grammar: " ++ show err
+  Right _ -> sequence . fmap makeDecl . fmap snd . M.toList . allRules $ st
+  where
+    (ei, st) = runState (runExceptT (runPinchot pinc))
+      (Names Set.empty Set.empty 0 M.empty)
+    makeDecl rule@(Rule nm _ _) = TH.valD pat body []
+      where
+        pat = TH.varP (TH.mkName $ "g'" ++ nm)
+        body = TH.normalB (earleyGrammarFromRule prefix rule)
 
--- | Typeclass for all productions, which allows you to extract a
--- sequence of terminal symbols from any production.
 
-class Production a where
-  type Terminal a :: *
-  terminals :: a -> Seq (Terminal a)
+prodDeclName :: String -> TH.Name
+prodDeclName name = TH.mkName $ "t'" ++ name
 
--- | Creates a 'Production' instance for a 'Rule'.
-productionInstance
-  :: Name
-  -- ^ Terminal type
-  -> String
+prodFn :: String -> TH.ExpQ
+prodFn = TH.varE . prodDeclName
+
+addIndices :: Foldable c => c a -> [(Int, a)]
+addIndices = zip [0..] . toList
+
+-- | Creates a production declaration for a 'Rule'.
+productionDecl
+  :: String
   -- ^ Rule name
   -> RuleType t
   -> TH.DecQ
-productionInstance term n t = TH.instanceD (return []) ty ds
+productionDecl n t = TH.funD (prodDeclName n) clauses
   where
-    ty = [t| Production $(TH.conT (TH.mkName n)) |]
-    ds = [syn, TH.funD 'terminals clauses]
-      where
-        syn = TH.tySynInstD ''Terminal
-          $ TH.tySynEqn [ TH.conT (TH.mkName n) ] (TH.conT term)
-        clauses = case t of
-          RTerminal _ -> [TH.clause [pat] bdy []]
-            where
-              pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_x")]
-              bdy = TH.normalB [| Seq.singleton $(TH.varE (TH.mkName "_x")) |]
+    clauses = case t of
+      RTerminal _ -> [TH.clause [pat] bdy []]
+        where
+          pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_x")]
+          bdy = TH.normalB [| Seq.singleton $(TH.varE (TH.mkName "_x")) |]
 
-          RBranch (b1, bs) -> branchToClause b1
-            : fmap branchToClause (toList bs)
+      RBranch (b1, bs) -> branchToClause b1
+        : fmap branchToClause (toList bs)
 
-          RSeqTerm _ -> [TH.clause [pat] bdy []]
-            where
-              pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_x")]
-              bdy = TH.normalB (dyn "_x")
+      RSeqTerm _ -> [TH.clause [pat] bdy []]
+        where
+          pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_x")]
+          bdy = TH.normalB (dyn "_x")
 
-          ROptional _ -> [justClause, nothingClause]
-            where
-              justClause
-                = TH.clause [TH.conP (TH.mkName n)
-                    [TH.conP 'Just [TH.varP (TH.mkName "_b")]]]
-                    (TH.normalB [| terminals $(TH.varE (TH.mkName "_b")) |])
-                    []
-              nothingClause
-                = TH.clause [TH.conP (TH.mkName n)
-                    [TH.conP 'Nothing []]]
-                    (TH.normalB [| Seq.empty |]) []
+      ROptional (Rule inner _ _) -> [justClause, nothingClause]
+        where
+          justClause
+            = TH.clause [TH.conP (TH.mkName n)
+                [TH.conP 'Just [TH.varP (TH.mkName "_b")]]]
+                (TH.normalB [| $(prodFn inner)
+                               $(TH.varE (TH.mkName "_b")) |])
+                []
+          nothingClause
+            = TH.clause [TH.conP (TH.mkName n)
+                [TH.conP 'Nothing []]]
+                (TH.normalB [| Seq.empty |]) []
 
-          RList _ -> [TH.clause [pat] bdy []]
-            where
-              pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_a")] 
-              bdy = TH.normalB [| join
-                $ fmap terminals $(TH.varE (TH.mkName "_a")) |]
+      RList (Rule inner _ _) -> [TH.clause [pat] bdy []]
+        where
+          pat = TH.conP (TH.mkName n) [TH.varP (TH.mkName "_a")] 
+          bdy = TH.normalB [| join
+            $ fmap $(prodFn inner) $(TH.varE (TH.mkName "_a")) |]
 
-          RList1 _ -> [TH.clause [pat] bdy []]
+      RList1 (Rule inner _ _) -> [TH.clause [pat] bdy []]
+        where
+          pat = TH.conP (TH.mkName n)
+            [TH.tupP [ dynP "_x1", dynP "_xs" ]]
+          bdy = TH.normalB
+            [| $lft `mappend` (join (fmap $(prodFn inner)
+                $(dyn "_xs"))) |]
             where
-              pat = TH.conP (TH.mkName n)
-                [TH.tupP [ dynP "_x1", dynP "_xs" ]]
-              bdy = TH.normalB
-                [| $lft `mappend` (join (fmap terminals
-                    $(dyn "_xs"))) |]
+              lft = [| $(prodFn inner) $(dyn "_x1") |]
+
+      RWrap (Rule inner _ _) -> [TH.clause [pat] bdy []]
+        where
+          pat = TH.conP (TH.mkName n) [dynP "_x"]
+          bdy = TH.normalB [| $(prodFn inner) $(dyn "_x") |]
+
+      RRecord sq -> [TH.clause [pat] (TH.normalB bdy) []]
+        where
+          pat = TH.conP (TH.mkName n) . fmap mkPat
+            . fmap fst . addIndices $ sq
+            where
+              mkPat idx = dynP ("_x'" ++ show idx)
+          bdy = foldr addField [| Seq.empty |] . addIndices $ sq
+            where
+              addField (idx, (Rule nm _ _)) acc = [| $this `mappend` $acc |]
                 where
-                  lft = [| terminals $(dyn "_x1") |]
+                  this = [| $(prodFn nm) $(dyn ("_x'" ++ show idx)) |]
 
-          RWrap _ -> [TH.clause [pat] bdy []]
+      RUnion (r1, rs) -> mkClause r1 : fmap mkClause (toList rs)
+        where
+          mkClause (Rule inner _ _) = TH.clause [pat] bdy []
             where
-              pat = TH.conP (TH.mkName n) [dynP "_x"]
-              bdy = TH.normalB [| terminals $(dyn "_x") |]
-
-          RRecord sq -> [TH.clause [pat] (TH.normalB bdy) []]
-            where
-              pat = TH.conP (TH.mkName n) . fmap mkPat
-                . take (Seq.length sq) $ [0 :: Int ..]
-                where
-                  mkPat idx = dynP ("_x" ++ show idx)
-              bdy = foldr addField [| Seq.empty |]
-                . take (Seq.length sq) $ [0 :: Int ..]
-                where
-                  addField idx acc = [| $this `mappend` $acc |]
-                    where
-                      this = [| terminals $(dyn ("_x" ++ show idx)) |]
-
-          RUnion (r1, rs) -> mkClause r1 : fmap mkClause (toList rs)
-            where
-              mkClause (Rule inner _ _) = TH.clause [pat] bdy []
-                where
-                  pat = TH.conP (TH.mkName (unionBranchName n inner))
-                    [dynP "_x"]
-                  bdy = TH.normalB [| terminals $(dyn "_x") |]
+              pat = TH.conP (TH.mkName (unionBranchName n inner))
+                [dynP "_x"]
+              bdy = TH.normalB [| $(prodFn inner) $(dyn "_x") |]
 
 
 branchToClause :: Branch t -> TH.ClauseQ
@@ -1356,15 +1365,14 @@ branchToClause (Branch n rs) = TH.clause [pat] bdy []
   where
     pat = TH.conP (TH.mkName n) fields
       where
-        fields = fmap mkField . take (Seq.length rs) $ [0 :: Int ..]
+        fields = fmap mkField . fmap fst . addIndices $ rs
           where
-            mkField idx = TH.varP (TH.mkName ("_x" ++ show idx))
+            mkField idx = TH.varP (TH.mkName ("_x'" ++ show idx))
     bdy = TH.normalB [| join $sq |]
       where
-        sq = foldr addField (TH.varE 'Seq.empty)
-          . take (Seq.length rs) $ [0 :: Int ..]
+        sq = foldr addField (TH.varE 'Seq.empty) . addIndices $ rs
           where
-            addField idx acc = [| $newTerm <| $acc |]
+            addField (idx, (Rule inner _ _)) acc = [| $newTerm <| $acc |]
               where
-                newTerm = [| terminals $(TH.varE
-                              (TH.mkName ("_x" ++ show idx))) |]
+                newTerm = [| $(prodFn inner) $(TH.varE
+                              (TH.mkName ("_x'" ++ show idx))) |]
