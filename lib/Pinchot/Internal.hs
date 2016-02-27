@@ -1170,24 +1170,95 @@ earleyGrammar
   -> Pinchot t (Rule t)
   -- ^ Creates an Earley parser for the 'Rule' that the 'Pinchot'
   -- returns.
+
   -> Q Exp
+  --  ^ When spliced, this expression has type
+  -- @'Text.Earley.Grammar' r ('Text.Earley.Prod' r 'String' t a)@
+  --
+  -- where
+  -- 
+  -- @r@ is left universally quantified
+  --
+  -- @t@ is the type of the token (usually 'Char')
+  --
+  -- @a@ is the type defined by the 'Rule'.
 earleyGrammar prefix pinc = case ei of
   Left err -> fail $ "pinchot: bad grammar: " ++ show err
-  Right r@(Rule top _ _) -> do
-    let neededRules = ruleAndAncestors r
-        otherNames = rulesDemandedBeforeDefined neededRules
-        lamb = lamE [lazyPattern otherNames] expression
-        expression = do
-          stmts <- fmap concat . mapM (ruleToParser prefix)
-            . toList $ neededRules
-          result <- bigTuple (ruleName top) otherNames
-          rtn <- [|return|]
-          let returner = rtn `AppE` result
-          return $ DoE (stmts ++ [NoBindS returner])
-    [| fmap fst (mfix $lamb) |]
+  Right r -> earleyGrammarFromRule prefix r
   where
     (ei, _) = runState (runExceptT (runPinchot pinc))
       (Names Set.empty Set.empty 0 M.empty)
+
+earleyGrammarFromRule
+  :: Syntax.Lift t
+  => String
+  -- ^ Module prefix
+  -> Rule t
+  -> Q Exp
+earleyGrammarFromRule prefix r@(Rule top _ _) = [| fmap fst (mfix $lamb) |]
+  where
+    neededRules = ruleAndAncestors r
+    otherNames = rulesDemandedBeforeDefined neededRules
+    expression = do
+      stmts <- fmap concat . mapM (ruleToParser prefix)
+        . toList $ neededRules
+      let result = bigTuple (ruleName top) otherNames
+      TH.doE (fmap return stmts ++ [TH.noBindS ([|return|] `appE` result)])
+    lamb = lamE [lazyPattern otherNames] expression
+
+-- | Creates an Earley grammar for each 'Rule' created in a
+-- 'Pinchot'.
+
+allEarleyGrammars
+  :: Syntax.Lift t
+
+  => String
+  -- ^ Module prefix.  You have to make sure that the data types you
+  -- created with 'ruleTreeToTypes' or with 'allRulesToTypes' are in
+  -- scope, either because they were spliced into the same module that
+  -- 'earleyParser' is spliced into, or because they are @import@ed
+  -- into scope.  The spliced Template Haskell code has to know where
+  -- to look for these data types.  If you did an unqualified @import@
+  -- or if the types are in the same module as is the splice of
+  -- 'earleyParser', just pass the empty string here.  If you did a
+  -- qualified import, pass the appropriate namespace here.
+  --
+  -- For example, if you used @import qualified MyAst@, pass
+  -- @\"MyAst\"@ here.  If you used @import qualified
+  -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
+  -- @\"MyLibrary.MyAst\"@ here.
+  --
+  -- For an example where the types are in the same module, see
+  -- "Pinchot.Examples.PostalAstRuleTree" or
+  -- "Pinchot.Examples.PostalAstAllRules".
+  --
+  -- For an example using a qualified import, see
+  -- "Pinchot.Examples.QualifiedImport".
+
+  -> Pinchot t a
+  -- ^ Creates an Earley grammar for each 'Rule' created in the
+  -- 'Pinchot'.  The return value of the 'Pinchot' computation is
+  -- ignored.
+
+  -> DecsQ
+  -- ^ When spliced, this is a list of declarations.  Each
+  -- declaration has type
+  -- @'Text.Earley.Grammar' r ('Text.Earley.Prod' r 'String' t a)@
+  --
+  -- where
+  -- 
+  -- @r@ is left universally quantified
+  --
+  -- @t@ is the type of the token (usually 'Char')
+  --
+  -- @a@ is the type defined by the 'Rule'.
+  --
+  -- The name of each declaration is
+  -- g'TYPE_NAME
+  --
+  -- where TYPE_NAME is the name of the type defined in the
+  -- corresponding 'Rule'.
+allEarleyGrammars = undefined
 
 -- | Typeclass for all productions, which allows you to extract a
 -- sequence of terminal symbols from any production.
