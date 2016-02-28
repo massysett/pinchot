@@ -33,7 +33,7 @@ import Language.Haskell.TH
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as Syntax
 import Text.Earley (satisfy, rule, symbol)
-import qualified Text.Earley ((<?>))
+import qualified Text.Earley
 
 -- | Type synonym for the name of a production rule.  This will be the
 -- name of the type constructor for the corresponding type that will
@@ -1119,9 +1119,23 @@ branchToParser prefix (Branch name rules) = case viewl rules of
       f soFar (Rule rule2 _ _) = [| $soFar <*> $(varE (ruleName rule2)) |]
   where
     constructor = constructorName prefix name
+
+-- # lazyPattern and bigTuple - because TH has no support for
+-- mdo notation
     
 -- | Creates a lazy pattern for all the given names.  Adds an empty
--- pattern onto the front.
+-- pattern onto the front.  This is the counterpart of 'bigTuple'.
+-- All of the given names are bound.  In addition, a single,
+-- wildcard pattern is bound to the front.
+-- 
+-- For example, @lazyPattern (map mkName ["x", "y", "z"])@ gives a
+-- pattern that looks like
+--
+-- @(_, (x, (y, (z, ()))))@
+--
+-- The idea is that the named patterns are needed so that the
+-- recursive @do@ notation works, and that the wildcard pattern is
+-- the return value, which is not needed here.
 lazyPattern
   :: Foldable c
   => c Name
@@ -1131,10 +1145,16 @@ lazyPattern = finish . foldr gen [p| () |]
     gen name rest = [p| ($(varP name), $rest) |]
     finish pat = [p| ~(_, $pat) |]
 
+-- | Creates a big tuple.  It is nested in the second element, such
+-- as (1, (2, (3, (4, ())))).  Thus, the big tuple is terminated
+-- with a unit value.  It resembles a list where each tuple is a
+-- cons cell and the terminator is unit.
 bigTuple
   :: Foldable c
   => Name
+  -- ^ This name will be the first one in the tuple.
   -> c Name
+  -- ^ Remaining names in the tuple.
   -> ExpQ
 bigTuple top = finish . foldr f [| () |]
   where
@@ -1376,3 +1396,68 @@ branchToClause (Branch n rs) = TH.clause [pat] bdy []
               where
                 newTerm = [| $(prodFn inner) $(TH.varE
                               (TH.mkName ("_x'" ++ show idx))) |]
+
+-- | Creates a record data type that holds a value of type
+--
+-- @'Text.Earley.Prod' r 'String' t a@
+--
+-- for every rule created in the 'Pinchot'.  @r@ is left
+-- universally quantified, @t@ is the token type (typically 'Char')
+-- and @a@ is the type of the rule.
+--
+-- For an example of the use of 'allRulesRecord', please see
+-- "Pinchot.Examples.AllRulesRecord".
+allRulesRecord
+  :: String
+  -- ^ Module prefix.  All the types created in the 'Pinchot' must
+  -- be accessible here.  So for example if you import your types
+  -- with
+  --
+  -- @import qualified Project.RuleTypes as Types@
+  --
+  -- then you would pass @"Types"@ here.  If you imported the types
+  -- unqualified, pass the empty string here.
+  -> String
+  -- ^ The name you want to give to your data type.  This must be a
+  -- valid Haskell type name.
+  -> Name
+  -- ^ Name of terminal type.  Typically you will get this through
+  -- the Template Haskell quoting mechanism, such as @''Char@.
+  -> Pinchot t a
+  -- ^ A record is created that holds a value for each 'Rule'
+  -- created in the 'Pinchot'; the return value of the 'Pinchot' is
+  -- ignored.
+  -> DecsQ
+  -- ^ When spliced, this will create a single declaration that is a
+  -- record with the name you gave.  It will have one type variable,
+  -- @r@.  Each record in the declaration will have a name like so:
+  --
+  -- @a'NAME@
+  --
+  -- where @NAME@ is the name of the type.  Don't count on these
+  -- records being in any particular order.
+allRulesRecord prefix nameStr termName pinc
+  = sequence [TH.dataD (return []) (TH.mkName nameStr) tys [con] []]
+  where
+    tys = [TH.PlainTV (TH.mkName "r")]
+    con = do
+      let pair = runState (runExceptT (runPinchot pinc))
+            (Names Set.empty Set.empty 0 M.empty)
+      names <- case fst pair of
+        Left err -> fail $ "pinchot: bad grammar: " ++ show err
+        Right _ -> return $ snd pair
+      TH.recC (TH.mkName nameStr)
+        (fmap (mkRecord . snd) . M.assocs . allRules $ names)
+    mkRecord (Rule ruleNm _ _) = TH.varStrictType recName st
+      where
+        recName = TH.mkName ("a'" ++ ruleNm)
+        st = TH.strictType TH.notStrict ty
+          where
+            ty = (TH.conT ''Text.Earley.Prod)
+              `TH.appT` (TH.varT (TH.mkName "r"))
+              `TH.appT` (TH.conT ''String)
+              `TH.appT` (TH.conT termName)
+              `TH.appT` (TH.conT (TH.mkName nameWithPrefix))
+            nameWithPrefix = case prefix of
+              [] -> ruleNm
+              _ -> prefix ++ '.' : ruleNm

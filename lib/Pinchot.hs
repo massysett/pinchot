@@ -70,6 +70,7 @@ module Pinchot
   , ruleTreeToTypes
   , earleyGrammar
   , allEarleyGrammars
+  , allRulesRecord
   ) where
 
 import Pinchot.Internal
