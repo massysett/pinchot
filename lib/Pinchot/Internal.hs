@@ -1415,7 +1415,7 @@ allRulesRecord
   --
   -- @import qualified Project.RuleTypes as Types@
   --
-  -- then you would pass @"Types"@ here.  If you imported the types
+  -- then you would pass @\"Types\"@ here.  If you imported the types
   -- unqualified, pass the empty string here.
   -> String
   -- ^ The name you want to give to your data type.  This must be a
