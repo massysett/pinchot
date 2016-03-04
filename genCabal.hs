@@ -6,7 +6,7 @@ module Main where
 import Cartel
 
 pinchotVer :: [Word]
-pinchotVer = [0,12,2,0]
+pinchotVer = [0,14,0,0]
 
 atleast :: NonEmptyString -> Version -> Package
 atleast n v = package n (gtEq v)
@@ -111,6 +111,18 @@ main = defaultMain $ do
 
       , executable "parrot" $
         [ mainIs "parrot.hs"
+        , condBlock (flag buildExe)
+            (buildable True, ( [ otherModules libMods
+                               , hsSourceDirs ["exe"]
+                               , buildDepends libraryDepends
+                               ] ++ commonOptions
+                             )
+            )
+            [buildable False]
+        ]
+
+      , executable "parakeet" $
+        [ mainIs "parakeet.hs"
         , condBlock (flag buildExe)
             (buildable True, ( [ otherModules libMods
                                , hsSourceDirs ["exe"]

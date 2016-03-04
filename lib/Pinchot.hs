@@ -63,14 +63,18 @@ module Pinchot
   , (<?>)
 
   -- * Transforming a Pinchot value to code
+  -- ** Creating data types
   , MakeOptics
   , makeOptics
   , noOptics
   , allRulesToTypes
   , ruleTreeToTypes
+  , allRulesRecord
+
+  -- ** Creating Earley grammars
+  , Qualifier
   , earleyGrammar
   , allEarleyGrammars
-  , allRulesRecord
   , earleyProduct
   ) where
 

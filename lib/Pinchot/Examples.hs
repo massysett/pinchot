@@ -17,6 +17,10 @@
 -- "Pinchot.Examples.AllEarleyGrammars" shows you how to use
 -- 'allEarleyGrammars'.
 --
+-- "Pinchot.Examples.AllRulesRecord" and
+-- "Pinchot.Examples.EarleyProduct" show you how to use
+-- 'allRulesRecord' and 'earleyProduct'.
+--
 -- Three executables are included in the @pinchot@ package.  To get
 -- them, compile @pinchot@ with the @executables@ Cabal flag.
 --

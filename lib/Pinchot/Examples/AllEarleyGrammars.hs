@@ -5,8 +5,8 @@
 
 module Pinchot.Examples.AllEarleyGrammars where
 
-import Pinchot
-import Pinchot.Examples.Postal
-import Pinchot.Examples.PostalAstAllRules
+import qualified Pinchot
+import qualified Pinchot.Examples.Postal as Postal
+import qualified Pinchot.Examples.PostalAstAllRules as PostalAstAllRules
 
-allEarleyGrammars "" postal
+Pinchot.allEarleyGrammars "PostalAstAllRules" ''Char Postal.postal

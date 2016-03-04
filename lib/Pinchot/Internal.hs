@@ -28,8 +28,8 @@ import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 import Language.Haskell.TH
   (ExpQ, ConQ, normalC, mkName, strictType, notStrict, newtypeD,
-   cxt, conT, Name, dataD, appT, DecsQ, appE, Q, uInfixE, bindS,
-   varE, varP, conE, Pat, Exp, lamE, recC, varStrictType, dyn)
+   cxt, conT, Name, dataD, appT, DecsQ, appE, Q, uInfixE,
+   varE, varP, conE, Pat, Exp, recC, varStrictType, dyn)
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as Syntax
 import Text.Earley (satisfy, rule, symbol)
@@ -467,8 +467,8 @@ thRule doLenses typeName derives (Rule nm _ ruleType) = do
   ty <- makeType typeName derives nm ruleType
   lenses <- if doLenses then ruleToOptics typeName nm ruleType
     else return []
-  inst <- productionDecl nm ruleType
-  return (ty : inst : lenses)
+  inst <- productionDecl nm typeName ruleType
+  return (ty : inst ++ lenses)
 
 
 makeType
@@ -1008,7 +1008,7 @@ ruleToParser
   => String
   -- ^ Module prefix
   -> Rule t
-  -> [TH.StmtQ]
+  -> [(Name, ExpQ)]
 ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   RTerminal ivls -> [makeRule expression]
@@ -1034,7 +1034,7 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   RSeqTerm sq -> [nestRule, topRule]
     where
-      nestRule = bindS (varP helper) [| rule $(foldl addTerm start sq) |]
+      nestRule = (helper, [| rule $(foldl addTerm start sq) |])
         where
           start = [|pure Seq.empty|]
           addTerm acc x = [| liftA2 (<|) (symbol x) $acc |]
@@ -1048,7 +1048,7 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   RList (Rule innerNm _ _) -> [nestRule, makeRule (wrapper helper)]
     where
-      nestRule = bindS (varP helper) ([|rule|] `appE` parseSeq)
+      nestRule = (helper, ([|rule|] `appE` parseSeq))
         where
           parseSeq = uInfixE [|pure Seq.empty|] [|(<|>)|] pSeq
             where
@@ -1056,7 +1056,7 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   RList1 (Rule innerNm _ _) -> [nestRule, makeRule topExpn]
     where
-      nestRule = bindS (varP helper) [|rule $(parseSeq)|]
+      nestRule = (helper, [|rule $(parseSeq)|])
         where
           parseSeq = [| pure Seq.empty <|> $pSeq |]
             where
@@ -1082,8 +1082,8 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
     
 
   where
-    makeRule expression = varP (ruleName nm) `bindS`
-      [|rule ($expression Text.Earley.<?> $(textToExp desc))|]
+    makeRule expression = (ruleName nm,
+      [|rule ($expression Text.Earley.<?> $(textToExp desc))|])
     desc = maybe nm id mayDescription
     textToExp txt = [| $(Syntax.lift txt) |]
     constructor = constructorName prefix nm
@@ -1174,35 +1174,16 @@ bigTuple top = finish . foldr f [| () |]
 earleyGrammar
   :: Syntax.Lift t
 
-  => String
-  -- ^ Module prefix.  You have to make sure that the data types you
-  -- created with 'ruleTreeToTypes' or with 'allRulesToTypes' are in
-  -- scope, either because they were spliced into the same module that
-  -- 'earleyParser' is spliced into, or because they are @import@ed
-  -- into scope.  The spliced Template Haskell code has to know where
-  -- to look for these data types.  If you did an unqualified @import@
-  -- or if the types are in the same module as is the splice of
-  -- 'earleyParser', just pass the empty string here.  If you did a
-  -- qualified import, pass the appropriate namespace here.
-  --
-  -- For example, if you used @import qualified MyAst@, pass
-  -- @\"MyAst\"@ here.  If you used @import qualified
-  -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
-  -- @\"MyLibrary.MyAst\"@ here.
-  --
-  -- For an example where the types are in the same module, see
-  -- "Pinchot.Examples.PostalAstRuleTree" or
-  -- "Pinchot.Examples.PostalAstAllRules".
-  --
-  -- For an example using a qualified import, see
-  -- "Pinchot.Examples.QualifiedImport".
+  => Qualifier
+  -- ^ Qualifier for data types crated with 'ruleTreeToTypes' or
+  -- 'allRulesToTypes'
 
   -> Pinchot t (Rule t)
   -- ^ Creates an Earley parser for the 'Rule' that the 'Pinchot'
   -- returns.
 
   -> Q Exp
-  --  ^ When spliced, this expression has type
+  -- ^ When spliced, this expression has type
   -- @'Text.Earley.Grammar' r ('Text.Earley.Prod' r 'String' t a)@
   --
   -- where
@@ -1222,7 +1203,9 @@ recursiveDo
   :: [(Name, ExpQ)]
   -- ^ Binding statements
   -> ExpQ
-  -- ^ Final return value from @do@ block
+  -- ^ Final return value from @do@ block.  The type of this 'ExpQ'
+  -- must be in the same monad as the @do@ block; it must not be a
+  -- pure value.
   -> ExpQ
   -- ^ Returns an expression whose value is the final return value
   -- from the @do@ block.
@@ -1249,17 +1232,10 @@ earleyGrammarFromRule
   -- ^ Module prefix
   -> Rule t
   -> Q Exp
-earleyGrammarFromRule prefix r@(Rule top _ _) = [| fmap fst (mfix $lamb) |]
+earleyGrammarFromRule prefix r@(Rule top _ _) = recursiveDo binds final
   where
-    neededRules = ruleAndAncestors r
-    otherNames = rulesDemandedBeforeDefined neededRules
-    expression =
-      let stmts = concatMap (ruleToParser prefix)
-            . toList $ neededRules
-          result = bigTuple (TH.varE $ ruleName top)
-            (fmap TH.varE . Set.toList $ otherNames)
-      in TH.doE (stmts ++ [TH.noBindS ([|return|] `appE` result)])
-    lamb = lamE [lazyPattern otherNames] expression
+    binds = concatMap (ruleToParser prefix) . toList . ruleAndAncestors $ r
+    final = [| return $(TH.varE $ ruleName top) |]
 
 -- | Creates an Earley grammar for each 'Rule' created in a
 -- 'Pinchot'.  For a 'Pinchot' with a large number of 'Rule's, this
@@ -1270,27 +1246,14 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = [| fmap fst (mfix $lamb) |]
 allEarleyGrammars
   :: Syntax.Lift t
 
-  => String
-  -- ^ Module prefix.  You have to make sure that the data types you
-  -- created with 'ruleTreeToTypes' or with 'allRulesToTypes' are in
-  -- scope, either because they were spliced into the same module that
-  -- 'earleyParser' is spliced into, or because they are @import@ed
-  -- into scope.  The spliced Template Haskell code has to know where
-  -- to look for these data types.  If you did an unqualified @import@
-  -- or if the types are in the same module as is the splice of
-  -- 'earleyParser', just pass the empty string here.  If you did a
-  -- qualified import, pass the appropriate namespace here.
-  --
-  -- For example, if you used @import qualified MyAst@, pass
-  -- @\"MyAst\"@ here.  If you used @import qualified
-  -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
-  -- @\"MyLibrary.MyAst\"@ here.
-  --
-  -- This argument is similar to that for 'earleyGrammar' so
-  -- the examples there might be useful.
-  --
-  -- For an example using this function, please see
-  -- "Pinchot.Examples.AllEarleyGrammars".
+  => Qualifier
+  -- ^ Qualifier for data types created with 'ruleTreeToTypes' or
+  -- 'allRulesToTypes'
+
+  -> Name
+  -- ^ Name for the terminal type; often this is 'Char'.  Typically
+  -- you will use the Template Haskell quoting mechanism--for
+  -- example, @\'\'Char@.
 
   -> Pinchot t a
   -- ^ Creates an Earley grammar for each 'Rule' created in the
@@ -1315,14 +1278,25 @@ allEarleyGrammars
   --
   -- where TYPE_NAME is the name of the type defined in the
   -- corresponding 'Rule'.
-allEarleyGrammars prefix pinc = do
+allEarleyGrammars prefix termName pinc = do
   st <- fmap fst $ goPinchot pinc
-  sequence . fmap makeDecl . fmap snd . M.toList . allRules $ st
+  sequence . concat . fmap makeDecl . fmap snd . M.toList
+    . allRules $ st
   where
-    makeDecl rule@(Rule nm _ _) = TH.valD pat body []
+    makeDecl rule@(Rule nm _ _) = [signature, TH.valD pat body []]
       where
-        pat = TH.varP (TH.mkName $ "g'" ++ nm)
+        signature = TH.sigD name types
+        r = TH.mkName "r"
+        types = TH.forallT [TH.PlainTV r] (return [])
+          $ [t| Text.Earley.Grammar $(TH.varT r)
+              (Text.Earley.Prod $(TH.varT r) String $(TH.conT termName)
+                                         $(TH.conT qualRuleName)) |]
+        name = TH.mkName $ "g'" ++ nm
+        pat = TH.varP name
         body = TH.normalB (earleyGrammarFromRule prefix rule)
+        qualRuleName
+          | null prefix = TH.mkName nm
+          | otherwise = TH.mkName (prefix ++ "." ++ nm)
 
 
 prodDeclName :: String -> TH.Name
@@ -1338,10 +1312,17 @@ addIndices = zip [0..] . toList
 productionDecl
   :: String
   -- ^ Rule name
+  -> Name
+  -- ^ Name of terminal type
   -> RuleType t
-  -> TH.DecQ
-productionDecl n t = TH.funD (prodDeclName n) clauses
+  -> TH.DecsQ
+productionDecl n termType t
+  = sequence [signature, TH.funD (prodDeclName n) clauses]
   where
+    signature = TH.sigD (prodDeclName n) types
+      where
+        types = TH.appT (TH.appT TH.arrowT (TH.conT (TH.mkName n)))
+          (TH.appT (TH.conT ''Seq) (TH.conT termType))
     clauses = case t of
       RTerminal _ -> [TH.clause [pat] bdy []]
         where
@@ -1428,6 +1409,33 @@ branchToClause (Branch n rs) = TH.clause [pat] bdy []
                 newTerm = [| $(prodFn inner) $(TH.varE
                               (TH.mkName ("_x'" ++ show idx))) |]
 
+-- | Many functions take an argument that holds the name qualifier
+-- for the module that contains the data types created by applying
+-- 'ruleTreeToTypes' or 'allRulesToTypes' to the 'Pinchot.'
+--
+-- You have to make sure that the data types you created with
+-- 'ruleTreeToTypes', 'allRulesToTypes', or 'allRulesRecord' are in
+-- scope.  The spliced Template Haskell code has to know where to
+-- look for these data types.  If you did an unqualified @import@ or
+-- if the types are in the same module as is the splice of
+-- 'earleyParser', just pass the empty string here.  If you did a
+-- qualified import, use the appropriate qualifier here.
+--
+-- For example, if you used @import qualified MyAst@, pass
+-- @\"MyAst\"@ here.  If you used @import qualified
+-- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
+-- @\"MyLibrary.MyAst\"@ here.
+--
+-- I recommend that you always create a new module and that all you
+-- do in that module is apply 'ruleTreeToTypes' or
+-- 'allRulesToTypes', and that you then perform an @import
+-- qualified@ to bring those names into scope in the module in which
+-- you use a function that takes a 'Qualifier' argument.  This
+-- avoids unlikely, but possible, issues that could otherwise arise
+-- due to naming conflicts.
+type Qualifier = String
+
+
 -- | Creates a record data type that holds a value of type
 --
 -- @'Text.Earley.Prod' r 'String' t a@
@@ -1436,21 +1444,15 @@ branchToClause (Branch n rs) = TH.clause [pat] bdy []
 -- universally quantified, @t@ is the token type (typically 'Char')
 -- and @a@ is the type of the rule.
 --
+-- This always creates a single product type whose name is
+-- @Productions@; currently the name cannot be configured.
+--
 -- For an example of the use of 'allRulesRecord', please see
 -- "Pinchot.Examples.AllRulesRecord".
 allRulesRecord
-  :: String
-  -- ^ Module prefix.  All the types created in the 'Pinchot' must
-  -- be accessible here.  So for example if you import your types
-  -- with
-  --
-  -- @import qualified Project.RuleTypes as Types@
-  --
-  -- then you would pass @\"Types\"@ here.  If you imported the types
-  -- unqualified, pass the empty string here.
-  -> String
-  -- ^ The name you want to give to your data type.  This must be a
-  -- valid Haskell type name.
+  :: Qualifier
+  -- ^ Qualifier for data types created with 'ruleTreeToTypes' or
+  -- 'allRulesToTypes'
   -> Name
   -- ^ Name of terminal type.  Typically you will get this through
   -- the Template Haskell quoting mechanism, such as @''Char@.
@@ -1460,16 +1462,17 @@ allRulesRecord
   -- ignored.
   -> DecsQ
   -- ^ When spliced, this will create a single declaration that is a
-  -- record with the name you gave.  It will have one type variable,
+  -- record with the name @Productions@.  It will have one type variable,
   -- @r@.  Each record in the declaration will have a name like so:
   --
   -- @a'NAME@
   --
   -- where @NAME@ is the name of the type.  Don't count on these
   -- records being in any particular order.
-allRulesRecord prefix nameStr termName pinc
+allRulesRecord prefix termName pinc
   = sequence [TH.dataD (return []) (TH.mkName nameStr) tys [con] []]
   where
+    nameStr = "Productions"
     tys = [TH.PlainTV (TH.mkName "r")]
     con = do
       names <- fmap fst $ goPinchot pinc
@@ -1494,35 +1497,12 @@ allRulesRecord prefix nameStr termName pinc
 earleyProduct
   :: Syntax.Lift t
 
-  => String
-  -- ^ Module prefix.  You have to make sure that the data types you
-  -- created with 'ruleTreeToTypes' or with 'allRulesToTypes' are in
-  -- scope, either because they were spliced into the same module that
-  -- 'earleyParser' is spliced into, or because they are @import@ed
-  -- into scope.  The spliced Template Haskell code has to know where
-  -- to look for these data types.  If you did an unqualified @import@
-  -- or if the types are in the same module as is the splice of
-  -- 'earleyParser', just pass the empty string here.  If you did a
-  -- qualified import, pass the appropriate namespace here.
-  --
-  -- For example, if you used @import qualified MyAst@, pass
-  -- @\"MyAst\"@ here.  If you used @import qualified
-  -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
-  -- @\"MyLibrary.MyAst\"@ here.
-  --
-  -- This argument is similar to that for 'earleyGrammar' so
-  -- the examples there might be useful.
-  --
-  -- For an example using this function, please see
-  -- "Pinchot.Examples.AllEarleyGrammars".
+  => Qualifier
+  -- ^ Qualifier for data types created with 'ruleTreeToTypes' or
+  -- 'allRulesToTypes'
 
-  -> String
-  -- ^ Module prefix for the module that contains the record created
-  -- with 'allRulesRecord'.  If that module is imported unqualified,
-  -- pass an empty string here.  Otherwise, pass a string containing
-  -- any module qualifier.  Fore example, if the record created with
-  -- 'allRulesRecord' was imported with @import qualified
-  -- Project.MyRecord@, pass @\"Project.Myrecord\"@ here.
+  -> Qualifier
+  -- ^ Module prefix for the type created with 'allRulesRecord'
 
   -> Pinchot t a
   -- ^ Creates an Earley grammar that contains a 'Text.Earley.Prod'
@@ -1531,18 +1511,20 @@ earleyProduct
 
   -> ExpQ
   -- ^ When spliced, 'earleyProduct' creates an expression whose
-  -- type is @'Text.Earley.Grammar' r (Rules r)@, where @Rules@ is
+  -- type is @'Text.Earley.Grammar' r (Productions r)@, where
+  -- @Productions@ is
   -- the type created by 'allRulesRecord'.
 earleyProduct pfxRule pfxRec pinc = do
   names <- fmap fst $ goPinchot pinc
-  TH.doE (stmts names ++ [TH.noBindS (returner names)])
+  let binds = concatMap (ruleToParser pfxRule)
+        . fmap snd . M.assocs . allRules $ names
+      final = [| return
+        $(TH.recConE (TH.mkName rulesRecName) (recs names)) |]
+  recursiveDo binds final
   where
-    stmts = concatMap (ruleToParser pfxRule) . allRules
-    returner names = [| return $(mkRulesRec names) |]
-    mkRulesRec names = TH.recConE (TH.mkName rulesRecName) (recs names)
     rulesRecName
-      | null pfxRec = "Rules"
-      | otherwise = pfxRec ++ ".Rules"
+      | null pfxRec = "Productions"
+      | otherwise = pfxRec ++ ".Productions"
     recs = fmap mkRec . fmap snd . M.assocs . allRules
       where
         mkRec (Rule n _ _) = return (TH.mkName recName, recVal)
