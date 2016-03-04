@@ -71,6 +71,7 @@ module Pinchot
   , earleyGrammar
   , allEarleyGrammars
   , allRulesRecord
+  , earleyProduct
   ) where
 
 import Pinchot.Internal

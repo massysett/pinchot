@@ -138,6 +138,16 @@ newtype Pinchot t a
   = Pinchot { runPinchot :: ExceptT Error (State (Names t)) a }
   deriving (Functor, Applicative, Monad, MonadFix)
 
+-- | Runs a 'Pinchot' with a starting empty state.  Fails in the Q
+-- monad if the grammar is bad.
+goPinchot :: Pinchot t a -> Q (Names t, a)
+goPinchot (Pinchot pinc) = case fst pair of
+  Left err -> fail $ "pinchot: bad grammar: " ++ show err
+  Right g -> return (snd pair, g)
+  where
+    pair = runState (runExceptT pinc)
+      (Names Set.empty Set.empty 0 M.empty)
+
 addRuleName
   :: RuleName
   -> Pinchot t ()
@@ -951,12 +961,9 @@ allRulesToTypes
   -- ^ The return value from the 'Pinchot' is ignored.
 
   -> DecsQ
-allRulesToTypes doOptics typeName derives pinchot = case ei of
-  Left err -> fail $ "pinchot: bad grammar: " ++ show err
-  Right _ -> thAllRules doOptics typeName derives (allRules st')
-  where
-    (ei, st') = runState (runExceptT (runPinchot pinchot))
-      (Names Set.empty Set.empty 0 M.empty)
+allRulesToTypes doOptics typeName derives pinchot = do
+  st' <- fmap fst $ goPinchot pinchot
+  thAllRules doOptics typeName derives (allRules st')
 
 -- | Creates data types only for the 'Rule' returned from the 'Pinchot', and
 -- for its ancestors.
@@ -980,15 +987,13 @@ ruleTreeToTypes
   -- ^ A data type is created for the 'Rule' that the 'Pinchot'
   -- returns, and for the ancestors of the 'Rule'.
   -> DecsQ
-ruleTreeToTypes doOptics typeName derives pinchot = case ei of
-  Left err -> fail $ "pinchot: bad grammar: " ++ show err
-  Right r -> fmap join . sequence . toList
+ruleTreeToTypes doOptics typeName derives pinchot = do
+  r <- fmap snd $ goPinchot pinchot
+  fmap join . sequence . toList
     . fmap (thRule doOptics typeName derives)
     . runCalc . getAncestors $ r
   where
-    runCalc stateCalc = fst $ runState stateCalc (Set.empty)
-    (ei, _) = runState (runExceptT (runPinchot pinchot))
-      (Names Set.empty Set.empty 0 M.empty)
+    runCalc stateCalc = fst $ runState stateCalc Set.empty
 
 addPrefix
   :: String
@@ -1131,7 +1136,7 @@ branchToParser prefix (Branch name rules) = case viewl rules of
 -- For example, @lazyPattern (map mkName ["x", "y", "z"])@ gives a
 -- pattern that looks like
 --
--- @(_, (x, (y, (z, ()))))@
+-- @~(_, (x, (y, (z, ()))))@
 --
 -- The idea is that the named patterns are needed so that the
 -- recursive @do@ notation works, and that the wildcard pattern is
@@ -1151,15 +1156,15 @@ lazyPattern = finish . foldr gen [p| () |]
 -- cons cell and the terminator is unit.
 bigTuple
   :: Foldable c
-  => Name
-  -- ^ This name will be the first one in the tuple.
-  -> c Name
-  -- ^ Remaining names in the tuple.
+  => ExpQ
+  -- ^ This expression will be the first one in the tuple.
+  -> c ExpQ
+  -- ^ Remaining expressions in the tuple.
   -> ExpQ
 bigTuple top = finish . foldr f [| () |]
   where
-    f n rest = [| ( $(varE n), $rest) |]
-    finish tup = [| ($(varE top), $tup) |]
+    f n rest = [| ( $(n), $rest) |]
+    finish tup = [| ($(top), $tup) |]
 
 -- | Creates an Earley grammar for a given 'Rule'.  For examples of how
 -- to use this, see the source code for
@@ -1207,12 +1212,36 @@ earleyGrammar
   -- @t@ is the type of the token (usually 'Char')
   --
   -- @a@ is the type defined by the 'Rule'.
-earleyGrammar prefix pinc = case ei of
-  Left err -> fail $ "pinchot: bad grammar: " ++ show err
-  Right r -> earleyGrammarFromRule prefix r
+earleyGrammar prefix pinc = do
+  r <- fmap snd $ goPinchot pinc
+  earleyGrammarFromRule prefix r
+
+-- | Builds a recursive @do@ expression (because TH has no support
+-- for @mdo@ notation).
+recursiveDo
+  :: [(Name, ExpQ)]
+  -- ^ Binding statements
+  -> ExpQ
+  -- ^ Final return value from @do@ block
+  -> ExpQ
+  -- ^ Returns an expression whose value is the final return value
+  -- from the @do@ block.
+recursiveDo binds final = [| fmap fst $ mfix $(fn) |]
   where
-    (ei, _) = runState (runExceptT (runPinchot pinc))
-      (Names Set.empty Set.empty 0 M.empty)
+    fn = [| \ $(lazyPattern (fmap fst binds)) -> $doBlock |]
+    doBlock = TH.doE (bindStmts ++ returnStmts)
+    bindStmts = map mkBind binds
+      where
+        mkBind (name, exp)
+          = TH.bindS (TH.varP name) exp
+    returnStmts = [bindRtnVal, returner]
+      where
+        rtnValName = TH.mkName "_returner"
+        bindRtnVal = TH.bindS (TH.varP rtnValName) final
+        returner
+          = TH.noBindS
+            [| return $(bigTuple (TH.varE rtnValName) 
+                                 (fmap (TH.varE . fst) binds)) |]
 
 earleyGrammarFromRule
   :: Syntax.Lift t
@@ -1227,12 +1256,16 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = [| fmap fst (mfix $lamb) |]
     expression =
       let stmts = concatMap (ruleToParser prefix)
             . toList $ neededRules
-          result = bigTuple (ruleName top) otherNames
+          result = bigTuple (TH.varE $ ruleName top)
+            (fmap TH.varE . Set.toList $ otherNames)
       in TH.doE (stmts ++ [TH.noBindS ([|return|] `appE` result)])
     lamb = lamE [lazyPattern otherNames] expression
 
 -- | Creates an Earley grammar for each 'Rule' created in a
--- 'Pinchot'.
+-- 'Pinchot'.  For a 'Pinchot' with a large number of 'Rule's, this
+-- can create a large number of declarations that can take a long
+-- time to compile--sometimes several minutes.  For lower
+-- compilation times, try 'earleyProduct'.
 
 allEarleyGrammars
   :: Syntax.Lift t
@@ -1282,12 +1315,10 @@ allEarleyGrammars
   --
   -- where TYPE_NAME is the name of the type defined in the
   -- corresponding 'Rule'.
-allEarleyGrammars prefix pinc = case ei of
-  Left err -> fail $ "pinchot: bad grammar: " ++ show err
-  Right _ -> sequence . fmap makeDecl . fmap snd . M.toList . allRules $ st
+allEarleyGrammars prefix pinc = do
+  st <- fmap fst $ goPinchot pinc
+  sequence . fmap makeDecl . fmap snd . M.toList . allRules $ st
   where
-    (ei, st) = runState (runExceptT (runPinchot pinc))
-      (Names Set.empty Set.empty 0 M.empty)
     makeDecl rule@(Rule nm _ _) = TH.valD pat body []
       where
         pat = TH.varP (TH.mkName $ "g'" ++ nm)
@@ -1441,11 +1472,7 @@ allRulesRecord prefix nameStr termName pinc
   where
     tys = [TH.PlainTV (TH.mkName "r")]
     con = do
-      let pair = runState (runExceptT (runPinchot pinc))
-            (Names Set.empty Set.empty 0 M.empty)
-      names <- case fst pair of
-        Left err -> fail $ "pinchot: bad grammar: " ++ show err
-        Right _ -> return $ snd pair
+      names <- fmap fst $ goPinchot pinc
       TH.recC (TH.mkName nameStr)
         (fmap (mkRecord . snd) . M.assocs . allRules $ names)
     mkRecord (Rule ruleNm _ _) = TH.varStrictType recName st
@@ -1461,3 +1488,66 @@ allRulesRecord prefix nameStr termName pinc
             nameWithPrefix = case prefix of
               [] -> ruleNm
               _ -> prefix ++ '.' : ruleNm
+
+-- | Creates a 'Text.Earley.Grammar' that contains a
+-- 'Text.Earley.Prod' for every 'Rule' created in the 'Pinchot'.
+earleyProduct
+  :: Syntax.Lift t
+
+  => String
+  -- ^ Module prefix.  You have to make sure that the data types you
+  -- created with 'ruleTreeToTypes' or with 'allRulesToTypes' are in
+  -- scope, either because they were spliced into the same module that
+  -- 'earleyParser' is spliced into, or because they are @import@ed
+  -- into scope.  The spliced Template Haskell code has to know where
+  -- to look for these data types.  If you did an unqualified @import@
+  -- or if the types are in the same module as is the splice of
+  -- 'earleyParser', just pass the empty string here.  If you did a
+  -- qualified import, pass the appropriate namespace here.
+  --
+  -- For example, if you used @import qualified MyAst@, pass
+  -- @\"MyAst\"@ here.  If you used @import qualified
+  -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
+  -- @\"MyLibrary.MyAst\"@ here.
+  --
+  -- This argument is similar to that for 'earleyGrammar' so
+  -- the examples there might be useful.
+  --
+  -- For an example using this function, please see
+  -- "Pinchot.Examples.AllEarleyGrammars".
+
+  -> String
+  -- ^ Module prefix for the module that contains the record created
+  -- with 'allRulesRecord'.  If that module is imported unqualified,
+  -- pass an empty string here.  Otherwise, pass a string containing
+  -- any module qualifier.  Fore example, if the record created with
+  -- 'allRulesRecord' was imported with @import qualified
+  -- Project.MyRecord@, pass @\"Project.Myrecord\"@ here.
+
+  -> Pinchot t a
+  -- ^ Creates an Earley grammar that contains a 'Text.Earley.Prod'
+  -- for each 'Rule' in the 'Pinchot'.  The return value from the
+  -- 'Pinchot' is ignored.
+
+  -> ExpQ
+  -- ^ When spliced, 'earleyProduct' creates an expression whose
+  -- type is @'Text.Earley.Grammar' r (Rules r)@, where @Rules@ is
+  -- the type created by 'allRulesRecord'.
+earleyProduct pfxRule pfxRec pinc = do
+  names <- fmap fst $ goPinchot pinc
+  TH.doE (stmts names ++ [TH.noBindS (returner names)])
+  where
+    stmts = concatMap (ruleToParser pfxRule) . allRules
+    returner names = [| return $(mkRulesRec names) |]
+    mkRulesRec names = TH.recConE (TH.mkName rulesRecName) (recs names)
+    rulesRecName
+      | null pfxRec = "Rules"
+      | otherwise = pfxRec ++ ".Rules"
+    recs = fmap mkRec . fmap snd . M.assocs . allRules
+      where
+        mkRec (Rule n _ _) = return (TH.mkName recName, recVal)
+          where
+            recName
+              | null pfxRec = "a'" ++ n
+              | otherwise = pfxRec ++ ".a'" ++ n
+            recVal = TH.VarE . ruleName $ n
