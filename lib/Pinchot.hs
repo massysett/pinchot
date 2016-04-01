@@ -76,6 +76,10 @@ module Pinchot
   , earleyGrammar
   , allEarleyGrammars
   , earleyProduct
+
+  -- ** Data types including location information
+  , ruleTreeToLocatedTypes
+  , allRulesToLocatedTypes
   ) where
 
 import Pinchot.Internal

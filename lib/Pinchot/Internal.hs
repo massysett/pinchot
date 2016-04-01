@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 -- | Pinchot internals.  Ordinarily the "Pinchot" module should have
@@ -1533,3 +1534,133 @@ earleyProduct pfxRule pfxRec pinc = do
               | null pfxRec = "a'" ++ n
               | otherwise = pfxRec ++ ".a'" ++ n
             recVal = TH.VarE . ruleName $ n
+
+-- Locater
+
+-- | A location.
+data Loc = Loc
+  { _line :: !Int
+  , _col :: !Int
+  , _pos :: !Int
+  } deriving (Eq, Ord, Read, Show)
+
+Lens.makeLenses ''Loc
+
+data Located a = Located
+  { _loc :: Loc
+  , _item :: a
+  } deriving (Eq, Ord, Show, Foldable, Functor, Traversable)
+
+type Locator = State Loc
+
+-- | Creates a data type for a 'Rule' that includes location
+-- information.
+locationData
+  :: Name
+  -- ^ Type name of terminal type
+  -> [Name]
+  -- ^ Derive these types
+  -> Rule t
+  -> TH.Q TH.Dec
+locationData typeName derives (Rule name _ ty) = case ty of
+  RTerminal _ -> newtypeD (return []) (mkName name) []
+    (TH.normalC (mkName name)
+                [TH.strictType TH.notStrict (TH.conT typeName)])
+    derives
+
+  RBranch (b1, bs) -> TH.dataD (return []) (mkName name) []
+    (mkCon b1 : toList (fmap mkCon bs)) derives
+    where
+      mkCon (Branch branchName rules) = TH.normalC (TH.mkName branchName)
+        (ctor1 : toList (fmap mkField rules))
+        where
+          ctor1 = TH.strictType TH.notStrict (TH.conT ''Loc)
+          mkField (Rule fieldName _ _) = TH.strictType TH.notStrict
+            (TH.conT (TH.mkName fieldName))
+
+  RUnion (r1, rs) -> TH.dataD (return []) (mkName name) []
+    (mkCon r1 : toList (fmap mkCon rs)) derives
+    where
+      mkCon (Rule branchName _ _) = TH.normalC (TH.mkName
+        (unionBranchName name branchName))
+        [ TH.strictType TH.notStrict (TH.conT ''Loc)
+        , (TH.strictType TH.notStrict (TH.conT (TH.mkName branchName)))
+        ]
+
+  RSeqTerm _ -> newtypeD (return []) (mkName name) []
+    (TH.normalC (mkName name)
+                [TH.strictType TH.notStrict [t| Seq $(TH.conT typeName) |]])
+    derives
+
+  ROptional (Rule opt _ _) -> TH.dataD (return []) (mkName name) []
+    [ TH.normalC (TH.mkName name)
+      [ TH.strictType TH.notStrict (TH.conT ''Loc)
+      , TH.strictType TH.notStrict [t| Maybe $(TH.conT (mkName opt)) |]
+      ]
+    ]
+    derives
+
+  RList (Rule subName _ _) -> TH.dataD (return []) (mkName name) []
+    [TH.normalC (mkName name)
+      [ TH.strictType TH.notStrict (TH.conT ''Loc)
+      
+      , TH.strictType TH.notStrict
+          [t| Seq (Loc, $(TH.conT (mkName subName))) |]
+      ]
+    ] derives
+
+  RList1 (Rule subName _ _) -> TH.dataD (return []) (mkName name) []
+    [ TH.normalC (TH.mkName name)
+        [ TH.strictType TH.notStrict (TH.conT ''Loc)
+        , TH.strictType TH.notStrict
+            [t| ( $(TH.conT (mkName subName))
+                , Seq (Loc, $(TH.conT (mkName subName)))) |]
+        ]
+    ] derives
+
+  RWrap (Rule subName _ _) -> TH.newtypeD (return []) (mkName name) []
+    ( TH.normalC (TH.mkName name)
+        [TH.strictType TH.notStrict (TH.conT (mkName subName))])
+    derives
+
+  RRecord rs -> dataD (cxt []) (mkName name) [] [ctor] derives
+    where
+      ctor = recC (mkName name) . zipWith mkField [(0 :: Int) ..]
+        . toList $ rs
+      mkField num (Rule rn _ _) = varStrictType (mkName fldNm)
+        (strictType notStrict [t| (Loc, $(TH.conT (mkName rn))) |])
+        where
+          fldNm = '_' : fieldName num name rn
+
+-- | Create types that include location information, for the given
+-- 'Rule' and all its ancestors. TODO implement optics.
+ruleTreeToLocatedTypes
+  :: MakeOptics
+  -> Name
+  -- ^ Type name of terminal type
+  -> Seq Name
+  -- ^ Derive these types
+  -> Pinchot t (Rule t)
+  -> DecsQ
+ruleTreeToLocatedTypes _ termType derives pinc = do
+  (_, rule) <- goPinchot pinc
+  let rs = ruleAndAncestors rule
+  fmap toList . traverse (locationData termType (toList derives))
+    $ rs
+
+-- | Create types that include location information for every 'Rule'
+-- created in the 'Pinchot'.  TODO implement optics.
+allRulesToLocatedTypes
+  :: MakeOptics
+  -> Name
+  -- ^ Type name of terminal type
+  -> Seq Name
+  -- ^ Derive these types
+  -> Pinchot t a
+  -- ^ Data types are created for every 'Rule' created in the
+  -- 'Pinchot'.  The return value from the 'Pinchot' is ignored.
+  -> DecsQ
+allRulesToLocatedTypes _ termType derives pinc = do
+  (names, _) <- goPinchot pinc
+  let rs = fmap snd . M.assocs . allRules $ names
+  traverse (locationData termType (toList derives)) rs
