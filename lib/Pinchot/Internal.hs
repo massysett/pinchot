@@ -4,8 +4,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_HADDOCK not-home, show-extensions #-}
+
 -- | Pinchot internals.  Ordinarily the "Pinchot" module should have
 -- everything you need.
+
+-- TODO
+-- Optics
+-- Single Located type
 
 module Pinchot.Internal where
 
