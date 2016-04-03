@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# OPTIONS_GHC -Wall #-}
 module Pinchot.Examples.Locator where
 
 import Pinchot
@@ -12,3 +13,5 @@ locateAddress
   -> Locator LocatedTypes.Address
 locateAddress = $(locateRuleFunction "AllRules" "LocatedTypes" 'advanceChar
   Postal.postal)
+
+$(locateAllRules "AllRules" "LocatedTypes" 'advanceChar Postal.postal)

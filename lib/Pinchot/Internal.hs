@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_HADDOCK not-home, show-extensions #-}
 -- | Pinchot internals.  Ordinarily the "Pinchot" module should have
 -- everything you need.
 
@@ -1557,6 +1558,14 @@ data Loc = Loc
 Lens.makeLenses ''Loc
 
 type Locator = State Loc
+
+-- | Runs a 'Locator' computation.
+-- Starts out with the line, column, and position all set to 1.
+locate
+  :: (a -> Locator b)
+  -> a
+  -> b
+locate k a = State.evalState (k a) (Loc 1 1 1)
 
 -- | Creates a data type for a 'Rule' that includes location
 -- information.

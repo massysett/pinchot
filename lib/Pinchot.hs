@@ -83,6 +83,7 @@ module Pinchot
   , col
   , pos
   , Locator
+  , locate
   , ruleTreeToLocatedTypes
   , allRulesToLocatedTypes
   , locateRuleFunction
