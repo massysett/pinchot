@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 -- | Pinchot internals.  Ordinarily the "Pinchot" module should have
 -- everything you need.
 
@@ -16,7 +17,8 @@ import Control.Monad (join, when)
 import Control.Monad.Fix (MonadFix, mfix)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, throwE, runExceptT)
-import Control.Monad.Trans.State (State, runState, get, put)
+import qualified Control.Monad.Trans.State as State
+import Control.Monad.Trans.State (State, runState)
 import Data.Char (isUpper)
 import Data.Foldable (toList)
 import Data.Map (Map)
@@ -35,6 +37,14 @@ import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as Syntax
 import Text.Earley (satisfy, rule, symbol)
 import qualified Text.Earley
+
+-- | Monomorphises 'State.get' to eliminate ambiguous type errors.
+get :: State s s
+get = State.get
+
+-- | Monomorphises 'State.put' to eliminate ambiuous type errors.
+put :: s -> State s ()
+put = State.put
 
 -- | Type synonym for the name of a production rule.  This will be the
 -- name of the type constructor for the corresponding type that will
@@ -1665,6 +1675,15 @@ allRulesToLocatedTypes _ termType derives pinc = do
 
 -- ## Creating locator functions
 
+-- | Advances the location for 'Char' values.  Tabs advance to the
+-- next eight-column tab stop; newlines advance to the next line and
+-- reset the column number to 1.  All other characters advance the
+-- column by 1.
+advanceChar :: Char -> Loc -> Loc
+advanceChar c (Loc !lin !col !pos)
+  | c == '\n' = Loc (lin + 1) 1 (pos + 1)
+  | c == '\t' = Loc lin (col + 8 - ((col - 1) `mod` 8)) (pos + 1)
+  | otherwise = Loc lin (col + 1) (pos + 1)
 
 -- | Returns a function that locates a particular value.  The
 -- function it returns has type
@@ -1734,6 +1753,20 @@ quald qual suf
   | null qual = mkName suf
   | otherwise = mkName (qual ++ '.':suf)
 
+-- | Given a sequence of rule names, creates a map where each key is
+-- a rule name and each value is a 'Name' referring to a function
+-- that will lookup the location of a parsed 'Rule'.
+functionLookupMap
+  :: [String]
+  -- ^ All names
+  -> TH.Q (M.Map String Name)
+functionLookupMap = go M.empty
+  where
+    go acc [] = return acc
+    go acc (x:xs) = do
+      n <- TH.newName $ "lookup" ++ x
+      go (M.insert x n acc) xs
+
 -- | An expression of type
 -- Parsed -> Locator Located
 
@@ -1759,6 +1792,7 @@ parsedToLocated qualP qualL adv (Rule name _ ty) = case ty of
              } |]
     [| \ $(outerPat) -> $(stmts) |]
 
+  -- TODO will get stuck in loop on recursive types.
   RBranch (b1, bs) -> do
     bound <- TH.newName "_branch"
     let outerPat = TH.varP bound
@@ -1779,7 +1813,7 @@ parsedToLocated qualP qualL adv (Rule name _ ty) = case ty of
     bound <- TH.newName "_seqTerm"
     let outerPat = TH.conP (quald qualP name) [TH.varP bound]
         traverser = [| \c -> do { pos <- get
-                                ; put ( $(TH.varE adv) $(TH.varE bound) )
+                                ; put ( $(TH.varE adv) c pos )
                                 ; return (pos, c)
                                 }
                     |]
@@ -1910,9 +1944,9 @@ unionBranchToLocated qualP qualL adv ruleName inner@(Rule innerNm _ _) = do
         (quald qualP (unionBranchName ruleName innerNm))
         [TH.varP field]
       getVal = parsedToLocated qualP qualL adv inner
-      ctor = TH.varE (quald qualL (unionBranchName ruleName innerNm))
+      ctor = TH.conE (quald qualL (unionBranchName ruleName innerNm))
       expn = [| do { loc <- get
-                   ; val <- $(getVal)
+                   ; val <- $(getVal) $(TH.varE field)
                    ; return $ $(ctor) loc val
                    } |]
   TH.match pat (TH.normalB expn) []

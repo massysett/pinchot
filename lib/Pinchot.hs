@@ -78,10 +78,16 @@ module Pinchot
   , earleyProduct
 
   -- ** Data types including location information
+  , Loc(..)
+  , line
+  , col
+  , pos
+  , Locator
   , ruleTreeToLocatedTypes
   , allRulesToLocatedTypes
   , locateRuleFunction
   , locateAllRules
+  , advanceChar
   ) where
 
 import Pinchot.Internal
