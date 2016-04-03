@@ -80,6 +80,8 @@ module Pinchot
   -- ** Data types including location information
   , ruleTreeToLocatedTypes
   , allRulesToLocatedTypes
+  , locateRuleFunction
+  , locateAllRules
   ) where
 
 import Pinchot.Internal
