@@ -1767,130 +1767,6 @@ functionLookupMap = go M.empty
       n <- TH.newName $ "lookup" ++ x
       go (M.insert x n acc) xs
 
--- | An expression of type
--- Parsed -> Locator Located
-
-unionBranchToLocated = undefined
-parsedToLocated
-  :: Qualifier
-  -- ^ Module that contains types for the parsed value
-  -> Qualifier
-  -- ^ Module that contains types for the located values
-  -> Name
-  -- ^ Function of type (t -> Loc -> Loc) that advances locations
-  -> Rule t
-  -> ExpQ
-parsedToLocated qualP qualL adv (Rule name _ ty) = case ty of
-  RTerminal _ -> do
-    char <- TH.newName "_char"
-    state <- TH.newName "_state"
-    let outerPat = TH.conP (quald qualP name) [TH.varP char]
-        stmts = [|
-          do { $(TH.varP state) <- get
-             ; put $ $(TH.varE adv) $(TH.varE char) $(TH.varE state)
-             ; return $ $(TH.conE (quald qualL name))
-                $(TH.varE state) $(TH.varE char)
-             } |]
-    [| \ $(outerPat) -> $(stmts) |]
-
-  -- TODO will get stuck in loop on recursive types.
-  RBranch (b1, bs) -> do
-    bound <- TH.newName "_branch"
-    let outerPat = TH.varP bound
-    [| \ $(outerPat) -> $(TH.caseE (TH.varE bound) matches) |]
-    where
-      calcBranch = branchParsedToLocated qualP qualL adv
-      matches = calcBranch b1 : toList (fmap calcBranch  bs)
-
-  RUnion (r1, rs) -> do
-    bound <- TH.newName "_union"
-    let outerPat = TH.varP bound
-    [| \ $(outerPat) -> $(TH.caseE (TH.varE bound) matches) |]
-    where
-      calcBranch = unionBranchToLocated qualP qualL adv name
-      matches = calcBranch r1 : toList (fmap calcBranch rs)
-
-  RSeqTerm _ -> do
-    bound <- TH.newName "_seqTerm"
-    let outerPat = TH.conP (quald qualP name) [TH.varP bound]
-        traverser = [| \c -> do { pos <- get
-                                ; put ( $(TH.varE adv) c pos )
-                                ; return (pos, c)
-                                }
-                    |]
-    [| \ $(outerPat) -> fmap $(TH.conE (quald qualL name))
-        $ traverse $(traverser) $(TH.varE bound) |]
-
-  ROptional rule -> do
-    bound <- TH.newName "_optional"
-    let outerPat = TH.conP (quald qualP name) [TH.varP bound]
-    [| \ $(outerPat) -> do
-        { pos <- get
-        ; inside <- case $(TH.varE bound) of
-            { Nothing -> return Nothing
-            ; Just ins -> fmap Just
-                $ $(parsedToLocated qualP qualL adv rule) ins
-            }
-        ; return $ $(TH.conE (quald qualL name)) pos inside
-        }
-      |]
-
-  RList rule -> do
-    bound <- TH.newName "_list"
-    let outerPat = TH.conP (quald qualP name) [TH.varP bound]
-        traverser = [| \ listElem -> do
-                        { pos <- get
-                        ; listElem' <- $(parsedToLocated qualP qualL adv rule)
-                            listElem
-                        ; return (pos, listElem')
-                        }
-                    |]
-    [| \ $(outerPat) -> do
-          { pos <- get
-          ; ls' <- traverse $(traverser) $(TH.varE bound)
-          ; return $ $(TH.conE (quald qualL name)) pos ls'
-          } |]
-
-  RList1 rule -> do
-    elem1 <- TH.newName "_elem1"
-    elemSq <- TH.newName "_elemSq"
-    let outerPat = TH.conP (quald qualP name)
-          [TH.tupP [TH.varP elem1, TH.varP elemSq]]
-        traverser = [| \ listElem -> do
-                        { pos <- get
-                        ; listElem' <- $(parsedToLocated qualP qualL adv rule)
-                            listElem
-                        ; return (pos, listElem')
-                        }
-                    |]
-    [| \ $(outerPat) -> do
-          { pos <- get
-          ; elem1' <- $(parsedToLocated qualP qualL adv rule)
-              $(varE elem1)
-          ; elemSq' <- traverse $(traverser) $(TH.varE elemSq)
-          ; return $ $(TH.conE (quald qualL name)) pos (elem1', elemSq')
-          } |]
-
-  RWrap rule -> do
-    bound <- TH.newName "_wrap"
-    let outerPat = TH.conP (quald qualP name) [TH.varP bound]
-    [| \ $(outerPat) -> do
-          { inner <- $(parsedToLocated qualP qualL adv rule) $(TH.varE bound)
-          ; return ( $(TH.conE (quald qualL name)) inner)
-          } |]
-
-  RRecord rules -> do
-    let parsedCtorName = quald qualP name
-        locCtorName = quald qualL name
-    recs <- fmap toList $ traverse (recordField qualP qualL adv) rules
-    let outerPat = TH.conP parsedCtorName (fmap fst3 recs)
-        rtnVal = foldl addField (TH.conE locCtorName) . fmap thd3 $ recs
-          where
-            addField acc field = [| $(acc) $(TH.varE field) |]
-        returner = TH.noBindS [| return $(rtnVal) |]
-        doExpn = TH.doE (fmap snd3 recs ++ [returner])
-    [| \ $(outerPat) -> $(doExpn) |]
-
 fst3 :: (a, b, c) -> a
 fst3 (a, _, _) = a
 
@@ -1899,87 +1775,6 @@ snd3 (_, b, _) = b
 
 thd3 :: (a, b, c) -> c
 thd3 (_, _, c) = c
-
--- | Processes fields in a record.  Given a Rule, returns:
---
--- * a pattern used to bind the corresponding parsed value;
--- * a do statement to get the location and located value, and
--- * the name of the value bound in the do statement.
-recordField
-  :: Qualifier
-  -- ^ Module that contains types for the parsed value
-  -> Qualifier
-  -- ^ Module that contains types for the located values
-  -> Name
-  -- ^ Function of type (t -> Loc -> Loc) that advances locations
-  -> Rule t
-  -> TH.Q (TH.PatQ, TH.StmtQ, TH.Name)
-recordField qualP qualL adv rule = do
-  nameParsed <- TH.newName "nameParsed"
-  nameLocated <- TH.newName "nameLocated"
-  let patParsed = TH.varP nameParsed
-      expBind = [| do { loc <- get
-                      ; val <- $(parsedToLocated qualP qualL adv rule)
-                                $(TH.varE nameParsed)
-                      ; return (loc, val)
-                      }
-                |]
-      stmt = TH.bindS (TH.varP nameLocated) expBind
-  return (patParsed, stmt, nameLocated)
-
-
-
-branchParsedToLocated
-  :: Qualifier
-  -- ^ Module that contains types for the parsed value
-  -> Qualifier
-  -- ^ Module that contains types for the located values
-  -> Name
-  -- ^ Function of type (t -> Loc -> Loc) that advances locations
-  -> Branch t
-  -> TH.MatchQ
-branchParsedToLocated qualP qualL adv (Branch branchName rules) = do
-  patsStmtsNames <-
-    traverse (branchRuleToPatAndBody qualP qualL adv)
-      . toList $ rules
-  location <- TH.newName "_location"
-  let pat = TH.ConP (quald qualP branchName)
-        (fmap (\(a, _, _) -> a) patsStmtsNames)
-      expn = TH.DoE (getLocation : locatedStmts ++ [lastStmt])
-      getLocation = TH.BindS (TH.VarP location) (TH.VarE 'get)
-      locatedStmts = fmap (\(_, a, _) -> a) patsStmtsNames
-      lastStmt = TH.NoBindS $ TH.VarE 'return
-        `TH.AppE` locatedValue
-      locatedValue = foldl addField start patsStmtsNames
-        where
-          addField acc (_, _, fieldName) = acc `TH.AppE`
-            (TH.VarE fieldName)
-          start = TH.ConE (quald qualL branchName)
-            `TH.AppE` (TH.VarE location)
-  return $ TH.Match pat (TH.NormalB expn) []
-
-branchRuleToPatAndBody
-  :: Qualifier
-  -- ^ Module that contains types for the parsed value
-  -> Qualifier
-  -- ^ Module that contains types for the located values
-  -> Name
-  -- ^ Function of type (t -> Loc -> Loc) that advances locations
-  -> Rule t
-  -> TH.Q (TH.Pat, TH.Stmt, TH.Name)
-  -- ^ Returns:
-  -- * a pattern that matches a field in the parsed value
-  --
-  -- * a do statement that binds the located value for this field
-  --
-  -- * the name of the variable bound in the do statement
-branchRuleToPatAndBody qualP qualL adv rule = do
-  parsedField <- TH.newName "_parsedField"
-  locatedValue <- TH.newName "_locatedValue"
-  locateRule <- [| $(parsedToLocated qualP qualL adv rule)
-    $(varE parsedField) |]
-  let stmt = TH.BindS (TH.VarP locatedValue) locateRule
-  return (TH.VarP parsedField, stmt, locatedValue)
 
 getRuleLocator
   :: Rule t
@@ -2062,7 +1857,7 @@ localLocatorExpression qualP qualL adv lkp (Rule name _ ty) = case ty of
     let outerPat = TH.varP bound
     [| \ $(outerPat) -> $(TH.caseE (TH.varE bound) matches) |]
     where
-      calcBranch = branchParsedToLocated' qualP qualL lkp
+      calcBranch = branchParsedToLocated qualP qualL lkp
       matches = calcBranch b1 : toList (fmap calcBranch  bs)
 
   RUnion (r1, rs) -> do
@@ -2070,7 +1865,7 @@ localLocatorExpression qualP qualL adv lkp (Rule name _ ty) = case ty of
     let outerPat = TH.varP bound
     [| \ $(outerPat) -> $(TH.caseE (TH.varE bound) matches) |]
     where
-      calcBranch = unionBranchToLocated' qualP qualL name lkp
+      calcBranch = unionBranchToLocated qualP qualL name lkp
       matches = calcBranch r1 : toList (fmap calcBranch rs)
 
   ROptional rule -> do
@@ -2134,7 +1929,7 @@ localLocatorExpression qualP qualL adv lkp (Rule name _ ty) = case ty of
   RRecord rules -> do
     let parsedCtorName = quald qualP name
         locCtorName = quald qualL name
-    recs <- fmap toList $ traverse (recordField' lkp) rules
+    recs <- fmap toList $ traverse (recordField lkp) rules
     let outerPat = TH.conP parsedCtorName (fmap fst3 recs)
         rtnVal = foldl addField (TH.conE locCtorName) . fmap thd3 $ recs
           where
@@ -2143,7 +1938,7 @@ localLocatorExpression qualP qualL adv lkp (Rule name _ ty) = case ty of
         doExpn = TH.doE (fmap snd3 recs ++ [returner])
     [| \ $(outerPat) -> $(doExpn) |]
 
-branchParsedToLocated'
+branchParsedToLocated
   :: Qualifier
   -- ^ Module that contains types for the parsed value
   -> Qualifier
@@ -2152,9 +1947,9 @@ branchParsedToLocated'
   -- ^ Map of all rule locating functions
   -> Branch t
   -> TH.MatchQ
-branchParsedToLocated' qualP qualL lkp (Branch branchName rules) = do
+branchParsedToLocated qualP qualL lkp (Branch branchName rules) = do
   patsStmtsNames <-
-    traverse (branchRuleToPatAndBody' lkp)
+    traverse (branchRuleToPatAndBody lkp)
       . toList $ rules
   location <- TH.newName "_location"
   let pat = TH.ConP (quald qualP branchName)
@@ -2172,7 +1967,7 @@ branchParsedToLocated' qualP qualL lkp (Branch branchName rules) = do
             `TH.AppE` (TH.VarE location)
   return $ TH.Match pat (TH.NormalB expn) []
 
-branchRuleToPatAndBody'
+branchRuleToPatAndBody
   :: M.Map String Name
   -- ^ Map of all rule locating functions
   -> Rule t
@@ -2183,7 +1978,7 @@ branchRuleToPatAndBody'
   -- * a do statement that binds the located value for this field
   --
   -- * the name of the variable bound in the do statement
-branchRuleToPatAndBody' lkp rule = do
+branchRuleToPatAndBody lkp rule = do
   parsedField <- TH.newName "_parsedField"
   locatedValue <- TH.newName "_locatedValue"
   locateRule <- [| $(TH.varE (getRuleLocator rule lkp))
@@ -2191,7 +1986,7 @@ branchRuleToPatAndBody' lkp rule = do
   let stmt = TH.BindS (TH.VarP locatedValue) locateRule
   return (TH.VarP parsedField, stmt, locatedValue)
 
-unionBranchToLocated'
+unionBranchToLocated
   :: Qualifier
   -- ^ Module that contains types for the parsed value
   -> Qualifier
@@ -2202,7 +1997,7 @@ unionBranchToLocated'
   -- ^ Map of all rule locating functions
   -> Rule t
   -> TH.MatchQ
-unionBranchToLocated' qualP qualL ruleName lkp inner@(Rule innerNm _ _) = do
+unionBranchToLocated qualP qualL ruleName lkp inner@(Rule innerNm _ _) = do
   field <- TH.newName "_field"
   let pat = TH.conP
         (quald qualP (unionBranchName ruleName innerNm))
@@ -2220,12 +2015,12 @@ unionBranchToLocated' qualP qualL ruleName lkp inner@(Rule innerNm _ _) = do
 -- * a pattern used to bind the corresponding parsed value;
 -- * a do statement to get the location and located value, and
 -- * the name of the value bound in the do statement.
-recordField'
+recordField
   :: M.Map String Name
   -- ^ Map of all rule locating functions
   -> Rule t
   -> TH.Q (TH.PatQ, TH.StmtQ, TH.Name)
-recordField' lkp rule = do
+recordField lkp rule = do
   nameParsed <- TH.newName "nameParsed"
   nameLocated <- TH.newName "nameLocated"
   let patParsed = TH.varP nameParsed
