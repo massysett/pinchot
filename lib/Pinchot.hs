@@ -92,4 +92,6 @@ module Pinchot
   ) where
 
 import Pinchot.Internal
+import Pinchot.Internal.Types
+import Pinchot.Internal.Rules
 import Pinchot.Intervals
