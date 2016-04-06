@@ -1,4 +1,4 @@
-module Pinchot.Internal.Types where
+module Pinchot.Types where
 
 import Pinchot.Intervals
 

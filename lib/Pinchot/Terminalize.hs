@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Pinchot.Internal.Terminalize where
+module Pinchot.Terminalize where
 
 import Control.Monad (join)
 import Data.Coerce (coerce)
@@ -10,8 +10,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
 
-import Pinchot.Internal.Types
-import Pinchot.Internal.Rules
+import Pinchot.Types
+import Pinchot.Rules
 
 -- | For all the given rules and their ancestors, creates
 -- declarations that reduce the rule and all its ancestors to

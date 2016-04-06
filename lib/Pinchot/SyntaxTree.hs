@@ -1,14 +1,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 -- | Grower - grows the types to hold a syntax tree
 
-module Pinchot.Internal.SyntaxTree where
+module Pinchot.SyntaxTree where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
 
-import Pinchot.Internal.Rules
-import Pinchot.Internal.Types
+import Pinchot.Rules
+import Pinchot.Types
 
 -- | Makes the top-level declarations for each given 'Rule' and for
 -- all ancestors of the given 'Rule's.  Since ancestors are

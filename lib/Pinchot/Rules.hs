@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
-module Pinchot.Internal.Rules where
+module Pinchot.Rules where
 
 import qualified Control.Lens as Lens
 import Control.Monad (join)
@@ -11,7 +11,7 @@ import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Pinchot.Internal.Types
+import Pinchot.Types
 import Pinchot.Intervals
 
 -- | Name a 'Rule' for use in error messages.  If you do not name a

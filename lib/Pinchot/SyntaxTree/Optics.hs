@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Pinchot.Internal.SyntaxTreeOptics where
+module Pinchot.SyntaxTree.Optics where
 
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes)
@@ -8,8 +8,8 @@ import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 
-import Pinchot.Internal.Rules
-import Pinchot.Internal.Types
+import Pinchot.Rules
+import Pinchot.Types
 import Pinchot.Intervals
 
 -- | Creates optics declarations for a single 'Rule', if optics can

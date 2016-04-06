@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Emulating recursive do notation, as TH does not support it.
-module Pinchot.Internal.RecursiveDo where
+module Pinchot.RecursiveDo where
 
 import Control.Monad.Fix (mfix)
 import qualified Language.Haskell.TH as T

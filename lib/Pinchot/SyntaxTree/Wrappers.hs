@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Pinchot.Internal.SyntaxTreeWrappers where
+module Pinchot.SyntaxTree.Wrappers where
 
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes)
@@ -7,8 +7,8 @@ import Data.Sequence (Seq)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 
-import Pinchot.Internal.Rules
-import Pinchot.Internal.Types
+import Pinchot.Rules
+import Pinchot.Types
 
 -- # Wrapped
 

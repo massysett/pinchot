@@ -1,11 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 -- | Creating Earley parsers.
 
-module Pinchot.Internal.Earley where
+module Pinchot.Earley where
 
-import Pinchot.Internal.RecursiveDo
-import Pinchot.Internal.Rules
-import Pinchot.Internal.Types
+import Pinchot.RecursiveDo
+import Pinchot.Rules
+import Pinchot.Types
 import Pinchot.Intervals
 
 import Control.Applicative ((<|>), liftA2)
