@@ -3,6 +3,7 @@ module Pinchot.Types where
 import Pinchot.Intervals
 
 import qualified Control.Lens as Lens
+import Control.Monad.Trans.State (State)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
 
@@ -165,3 +166,32 @@ quald qual suf
   | null qual = T.mkName suf
   | otherwise = T.mkName (qual ++ '.':suf)
 
+-- | A location.
+
+data Loc = Loc
+  { _line :: Int
+  , _col :: Int
+  , _pos :: Int
+  } deriving (Eq, Ord, Read, Show)
+
+line :: Lens.Lens' Loc Int
+line = Lens.lens _line (\r l -> r { _line = l })
+
+col :: Lens.Lens' Loc Int
+col = Lens.lens _col (\r l -> r { _col = l })
+
+pos :: Lens.Lens' Loc Int
+pos = Lens.lens _pos (\r l -> r { _pos = l })
+
+type Locator = State Loc
+
+data Located a = Located
+  { _loc :: Loc
+  , _ated :: a
+  } deriving (Eq, Ord, Read, Show)
+
+loc :: Lens.Lens' (Located a) Loc
+loc = Lens.lens _loc (\r l -> r { _loc = l })
+
+ated :: Lens.Lens' (Located a) a
+ated = Lens.lens _ated (\r l -> r { _ated = l })
