@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Pinchot.SyntaxTree.Optics where
 
+import Data.Coerce (coerce)
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes)
 import Data.Sequence (Seq)
@@ -35,7 +36,7 @@ ruleToOptics
   -> T.Q [T.Dec]
 ruleToOptics qual termName (Rule nm _ ty) = case ty of
   Terminal ivls -> terminalToOptics qual termName nm ivls
-  NonTerminal b1 bs -> return $ nonTerminalToOptics qual nm b1 bs
+  NonTerminal b1 bs -> sequence $ nonTerminalToOptics qual nm b1 bs
   Terminals sq -> terminalsToOptics qual termName nm sq
   Record sq -> return $ recordsToOptics qual nm sq
   _ -> return []
@@ -58,21 +59,24 @@ terminalToOptics
   -> Intervals t
   -> T.Q [T.Dec]
 terminalToOptics qual termName nm ivls = do
-  e1 <- T.sigD (T.mkName ('_':nm)) (T.conT ''Lens.Prism'
-        `T.appT` T.conT termName
-        `T.appT` T.conT (quald qual nm))
+  e1 <- T.sigD (T.mkName ('_':nm))
+    [t| Lens.Prism' ( $(T.conT termName), $(anyType) )
+                    ($(T.conT (quald qual nm)) $(anyType))
+    |]
+  
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
+    anyType = T.varT (T.mkName "a")
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
     fetchName = T.varE (T.mkName "_x")
     ctor = T.conE (quald qual nm)
     expn = [| let fetch $fetchPat = $fetchName
-                  store _term
-                    | inIntervals ivls _term = Right ($ctor _term)
-                    | otherwise = Left _term
-              in Lens.prism fetch store
+                  store (term, a)
+                    | inIntervals ivls term = Just ($(ctor) (term, a))
+                    | otherwise = Nothing
+              in Lens.prism' fetch store
            |]
 
 -- | Creates prisms for each 'Branch'.
@@ -84,82 +88,82 @@ nonTerminalToOptics
   -- ^ Rule name
   -> Branch t
   -> Seq (Branch t)
-  -> [T.Dec]
+  -> [T.Q T.Dec]
 nonTerminalToOptics qual nm b1 bsSeq
   = concat $ makePrism b1 : fmap makePrism bs
   where
     bs = toList bsSeq
     makePrism (Branch inner rulesSeq) = [ signature, binding ]
       where
+        anyType = T.varT (T.mkName "a")
         rules = toList rulesSeq
         prismName = T.mkName ('_' : inner)
-        signature = T.SigD prismName
-          $ (T.ConT ''Lens.Prism')
-          `T.AppT` (T.ConT (quald qual nm))
-          `T.AppT` fieldsType
+        signature = T.sigD prismName
+          [t| Lens.Prism' ($(T.conT (quald qual nm)) $(anyType))
+                          $(fieldsType) |]
           where
             fieldsType = case rules of
-              [] -> T.TupleT 0
-              Rule r1 _ _ : [] -> T.ConT (quald qual r1)
-              rs -> foldl addType (T.TupleT (length rs)) rs
+              [] -> T.tupleT 0
+              Rule r1 _ _ : [] -> [t| $(T.conT (quald qual r1)) $(anyType) |]
+              rs -> foldl addType (T.tupleT (length rs)) rs
                 where
-                  addType soFar (Rule r _ _) = soFar `T.AppT`
-                    (T.ConT (quald qual r))
-        binding = T.ValD (T.VarP prismName) body []
+                  addType soFar (Rule r _ _) = soFar `T.appT`
+                    [t| $(T.conT (quald qual r)) $(anyType) |]
+        binding = T.valD (T.varP prismName) body []
           where
-            body = T.NormalB
-              $ (T.VarE 'Lens.prism)
-              `T.AppE` setter
-              `T.AppE` getter
+            body = T.normalB
+              $ (T.varE 'Lens.prism)
+              `T.appE` setter
+              `T.appE` getter
               where
-                setter = T.LamE [pat] expn
+                setter = T.lamE [pat] expn
                   where
                     (pat, expn) = case rules of
-                      [] -> (T.TupP [], T.ConE (quald qual inner))
-                      _ : [] -> (T.VarP local,
-                        T.ConE (quald qual inner)
-                        `T.AppE` T.VarE local)
+                      [] -> (T.tupP [], T.conE (quald qual inner))
+                      _ : [] -> (T.varP local,
+                        T.conE (quald qual inner)
+                        `T.appE` T.varE local)
                         where
                           local = T.mkName "_x"
-                      ls -> (T.TupP pats, set)
+                      ls -> (T.tupP pats, set)
                         where
-                          pats = fmap (\i -> T.VarP (T.mkName ("_x" ++ show i)))
+                          pats = fmap (\i -> T.varP (T.mkName ("_x" ++ show i)))
                             . take (length ls) $ [(0 :: Int) ..]
                           set = foldl addVar start . take (length ls)
                             $ [(0 :: Int) ..]
                             where
-                              addVar acc i = acc `T.AppE`
-                                (T.VarE (T.mkName ("_x" ++ show i)))
-                              start = T.ConE (quald qual inner)
+                              addVar acc i = acc `T.appE`
+                                (T.varE (T.mkName ("_x" ++ show i)))
+                              start = T.conE (quald qual inner)
 
-                getter = T.LamE [pat] expn
+                getter = T.lamE [pat] expn
                   where
                     local = T.mkName "_x"
-                    pat = T.VarP local
-                    expn = T.CaseE (T.VarE (T.mkName "_x")) $
-                      T.Match patCtor bodyCtor []
+                    pat = T.varP local
+                    expn = T.caseE (T.varE (T.mkName "_x")) $
+                      T.match patCtor bodyCtor []
                       : rest
                       where
-                        patCtor = T.ConP (quald qual inner)
-                          . fmap (\i -> T.VarP (T.mkName $ "_y" ++ show i))
+                        patCtor = T.conP (quald qual inner)
+                          . fmap (\i -> T.varP (T.mkName $ "_y" ++ show i))
                           . take (length rules)
                           $ [(0 :: Int) ..]
-                        bodyCtor = T.NormalB . (T.ConE 'Right `T.AppE`)
+                        bodyCtor = T.normalB . (T.conE 'Right `T.appE`)
                           $ case rules of
-                          [] -> T.TupE []
-                          _:[] -> T.VarE (T.mkName "_y0")
-                          _ -> T.TupE
-                            . fmap (\i -> T.VarE (T.mkName $ "_y" ++ show i))
+                          [] -> T.tupE []
+                          _:[] -> T.varE (T.mkName "_y0")
+                          _ -> T.tupE
+                            . fmap (\i -> T.varE (T.mkName $ "_y" ++ show i))
                             . take (length rules)
                             $ [(0 :: Int) ..]
                         rest = case bs of
                           [] -> []
-                          _ -> [T.Match patBlank bodyBlank []]
+                          _ -> [T.match patBlank bodyBlank []]
                           where
-                            patBlank = T.VarP (T.mkName "_z")
-                            bodyBlank = T.NormalB
-                              $ T.ConE ('Left)
-                              `T.AppE` T.VarE (T.mkName "_z")
+                            patBlank = T.varP (T.mkName "_z")
+                            bodyBlank = T.normalB
+                              $ T.conE ('Left)
+                              `T.appE` T.varE (T.mkName "_z")
 
 -- | Creates a prism for a 'Terminals'.
 terminalsToOptics
@@ -174,21 +178,22 @@ terminalsToOptics
   -> Seq t
   -> T.Q [T.Dec]
 terminalsToOptics qual termName nm sq = do
-  e1 <- T.sigD (T.mkName ('_':nm)) (T.conT ''Lens.Prism'
-    `T.appT` (T.conT ''Seq `T.appT` T.conT termName)
-    `T.appT` T.conT (quald qual nm))
+  e1 <- T.sigD (T.mkName ('_':nm)) 
+    [t| Lens.Prism' (Seq ( $(T.conT termName), $(anyType) ))
+                    ( $(T.conT (quald qual nm)), $(anyType)) |]
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
+    anyType = T.varT (T.mkName "a")
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
     fetchName = T.varE (T.mkName "_x")
     ctor = T.conE (T.mkName nm)
-    expn = [| let fetch $fetchPat = $fetchName
+    expn = [| let fetch = coerce
                   store _term
-                    | $(liftSeq sq) == _term = Right ($ctor _term)
-                    | otherwise = Left _term
-              in Lens.prism fetch store
+                    | $(liftSeq sq) == fmap fst _term = Just ($ctor _term)
+                    | otherwise = Nothing
+              in Lens.prism' fetch store
            |]
 
 recordsToOptics

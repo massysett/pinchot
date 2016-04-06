@@ -31,7 +31,8 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   Terminal ivls -> [makeRule expression]
     where
-      expression = [| fmap $constructor (satisfy (inIntervals ivls)) |]
+      expression = [| fmap (\c -> $constructor (c, ()))
+        (satisfy (inIntervals ivls)) |]
 
   NonTerminal b1 bs -> [makeRule expression]
     where

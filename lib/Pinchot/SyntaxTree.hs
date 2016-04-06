@@ -42,27 +42,29 @@ ruleToType
   -> Rule t
   -> T.Q T.Dec
 ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
-  Terminal _ -> T.newtypeD (T.cxt []) name [] newtypeCon derives
+  Terminal _ -> T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [T.strictType T.notStrict (T.conT typeName)]
+        [T.strictType T.notStrict
+          [t| ( $(T.varT (T.mkName "a")), $(T.conT typeName) ) |] ]
 
-  NonTerminal b1 bs -> T.dataD (T.cxt []) name [] cons derives
+  NonTerminal b1 bs -> T.dataD (T.cxt []) name [anyType] cons derives
     where
       cons = branchConstructor b1 : toList (fmap branchConstructor bs)
 
-  Terminals _ -> T.newtypeD (T.cxt []) name [] cons derives
+  Terminals _ -> T.newtypeD (T.cxt []) name [anyType] cons derives
     where
       cons = T.normalC name
         [T.strictType T.notStrict (T.appT [t| Seq |]
                                         (T.conT typeName))]
 
-  Wrap (Rule inner _ _) -> T.newtypeD (T.cxt []) name [] newtypeCon derives
+  Wrap (Rule inner _ _) ->
+    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [ T.strictType T.notStrict (T.conT (T.mkName inner)) ]
 
-  Record sq -> T.dataD (T.cxt []) name [] [ctor] derives
+  Record sq -> T.dataD (T.cxt []) name [anyType] [ctor] derives
     where
       ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
       mkField num (Rule rn _ _) = T.varStrictType (T.mkName fldNm)
@@ -70,19 +72,22 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
         where
           fldNm = '_' : recordFieldName num nm rn
 
-  Opt (Rule inner _ _) -> T.newtypeD (T.cxt []) name [] newtypeCon derives
+  Opt (Rule inner _ _) ->
+    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict (T.appT [t| Maybe |]
                                     (T.conT (T.mkName inner)))]
 
-  Star (Rule inner _ _) -> T.newtypeD (T.cxt []) name [] newtypeCon derives
+  Star (Rule inner _ _) ->
+    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict (T.appT [t| Seq |]
                                     (T.conT (T.mkName inner)))]
 
-  Plus (Rule inner _ _) -> T.newtypeD (T.cxt []) name [] cons derives
+  Plus (Rule inner _ _) ->
+    T.newtypeD (T.cxt []) name [anyType] cons derives
     where
       cons = T.normalC name [tup]
         where
@@ -92,4 +97,6 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
 
   where
     name = T.mkName nm
+    anyType = T.PlainTV (T.mkName "a")
+
 

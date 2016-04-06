@@ -10,5 +10,5 @@ locate
   :: (a -> Locator b)
   -> a
   -> b
-locate k a = State.evalState (k a) (Loc 1 1 1 ())
+locate k a = State.evalState (k a) (Loc 1 1 1)
 

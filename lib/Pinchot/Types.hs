@@ -168,24 +168,20 @@ quald qual suf
 
 -- | A location.
 
-data Loc a = Loc
+data Loc = Loc
   { _line :: Int
   , _col :: Int
   , _pos :: Int
-  , _ated :: a
   } deriving (Eq, Ord, Read, Show)
 
-line :: Lens.Lens' (Loc a) Int
+line :: Lens.Lens' Loc Int
 line = Lens.lens _line (\r l -> r { _line = l })
 
-col :: Lens.Lens' (Loc a) Int
+col :: Lens.Lens' Loc Int
 col = Lens.lens _col (\r l -> r { _col = l })
 
-pos :: Lens.Lens' (Loc a) Int
+pos :: Lens.Lens' Loc Int
 pos = Lens.lens _pos (\r l -> r { _pos = l })
 
-ated :: Lens.Lens' (Loc a) a
-ated = Lens.lens _ated (\r l -> r { _ated = l })
-
-type Locator = State (Loc ())
+type Locator = State Loc
 
