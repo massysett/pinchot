@@ -6,6 +6,7 @@
 -- usually need.
 module Pinchot.Intervals where
 
+import qualified Control.Lens as Lens
 import Control.Monad (join)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
@@ -19,16 +20,18 @@ import Language.Haskell.TH.Syntax
 -- 'mappend', which will combine both the included and excluded
 -- terminal symbols from each operand.
 data Intervals a = Intervals
-  { included :: Seq (a, a)
+  { _included :: Seq (a, a)
   -- ^ Each pair @(a, b)@ is an inclusive range of terminal symbols,
   -- in order.  For instance, @('a', 'c')@ includes the characters
   -- @'a'@, @'b'@, and @'c'@.  The 'included' sequence contains all
   -- terminals that are included in the 'Intervals', except for those
   -- that are 'excluded'.
-  , excluded :: Seq (a, a)
+  , _excluded :: Seq (a, a)
   -- ^ Each symbol in 'excluded' is not in the 'Intervals', even if
   -- the symbol is 'included'.
   } deriving (Eq, Ord, Show)
+
+Lens.makeLenses ''Intervals
 
 instance Functor Intervals where
   fmap f (Intervals a b) = Intervals (fmap g a) (fmap g b)
