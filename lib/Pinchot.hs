@@ -43,6 +43,9 @@ module Pinchot
   , wrappedInstances
   , rulesToOptics
 
+  -- * Creating Earley grammars
+  , earleyGrammarFromRule
+  , earleyProduct
 
   -- * Locations
   , Loc(..)

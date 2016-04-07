@@ -3,6 +3,7 @@
 
 module Pinchot.Earley where
 
+import Pinchot.NonEmpty
 import Pinchot.RecursiveDo
 import Pinchot.Rules
 import Pinchot.Types
@@ -46,7 +47,8 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
       nestRule = (helper, [| Text.Earley.rule $(foldl addTerm start sq) |])
         where
           start = [|pure Seq.empty|]
-          addTerm acc x = [| liftA2 (<|) (symbol x) $acc |]
+          addTerm acc x =
+            [| let f s a = (s, ()) <| a in liftA2 f (symbol x) $acc |]
       topRule = makeRule (wrapper helper)
 
   Wrap (Rule innerNm _ _) -> [makeRule expression]
@@ -86,9 +88,9 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
             where
               pSeq = [| (<|) <$> $(T.varE (localRuleName innerNm))
                              <*> $(T.varE helper) |]
-      topExpn = [| $constructor <$> ( (,) <$> $(T.varE (localRuleName innerNm))
-                                        <*> $(T.varE helper)
-                                    ) |]
+      topExpn = [| $constructor <$>
+        ( NonEmpty <$> $(T.varE (localRuleName innerNm))
+                   <*> $(T.varE helper)) |]
 
 
   where
@@ -121,11 +123,20 @@ branchToParser prefix (Branch name rules) = case viewl rules of
   where
     constructor = T.conE (quald prefix name)
 
+-- | Creates an expression that has type
+--
+-- 'Text.Earley.Grammar' r (Prod r String c (p ()))
+--
+-- where @r@ is left universally quantified; @c@ is the terminal
+-- type (often 'Char'), and @p@ is the data type corresponding to
+-- the given 'Rule'.
 earleyGrammarFromRule
   :: Syntax.Lift t
   => Qualifier
-  -- ^ Module prefix
+  -- ^ Module prefix holding the data types created with
+  -- 'Pinchot.syntaxTrees'
   -> Rule t
+  -- ^ Create a grammar for this 'Rule'
   -> T.Q T.Exp
 earleyGrammarFromRule prefix r@(Rule top _ _) = recursiveDo binds final
   where
