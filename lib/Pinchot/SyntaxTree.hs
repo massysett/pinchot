@@ -7,6 +7,7 @@ import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
 
+import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.Types
 
@@ -16,9 +17,10 @@ import Pinchot.Types
 -- applying this function to a single start symbol.
 syntaxTrees
   :: T.Name
-  -- ^ Name of terminal type
+  -- ^ Name of terminal type.  Typically you will get this from the
+  -- Template Haskell quoting mechanism, e.g. @''Char@.
   -> [T.Name]
-  -- ^ What to derive
+  -- ^ What to derive, e.g. @[''Eq, ''Ord, ''Show]@
   -> Seq (Rule t)
   -> T.DecsQ
 syntaxTrees term derives
@@ -30,8 +32,10 @@ branchConstructor :: Branch t -> T.ConQ
 branchConstructor (Branch nm rules) = T.normalC name fields
   where
     name = T.mkName nm
-    mkField (Rule n _ _) = T.strictType T.notStrict (T.conT (T.mkName n))
+    mkField (Rule n _ _) = T.strictType T.notStrict
+      [t| $(T.conT (T.mkName n)) $(anyTypeVar) |]
     fields = toList . fmap mkField $ rules
+    anyTypeVar = T.varT (T.mkName "a")
 
 -- | Makes the top-level declaration for a given rule.
 ruleToType
@@ -46,7 +50,7 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict
-          [t| ( $(T.varT (T.mkName "a")), $(T.conT typeName) ) |] ]
+          [t| ( $(T.conT typeName), $(T.varT (T.mkName "a")) ) |] ]
 
   NonTerminal b1 bs -> T.dataD (T.cxt []) name [anyType] cons derives
     where
@@ -55,20 +59,22 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
   Terminals _ -> T.newtypeD (T.cxt []) name [anyType] cons derives
     where
       cons = T.normalC name
-        [T.strictType T.notStrict (T.appT [t| Seq |]
-                                        (T.conT typeName))]
+        [T.strictType T.notStrict
+          [t| Seq ( ( $(T.conT typeName), $(T.varT (T.mkName "a")))) |] ]
 
   Wrap (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [ T.strictType T.notStrict (T.conT (T.mkName inner)) ]
+        [ T.strictType T.notStrict
+            [t| $(T.conT (T.mkName inner)) $(anyTypeVar) |] ]
 
   Record sq -> T.dataD (T.cxt []) name [anyType] [ctor] derives
     where
       ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
       mkField num (Rule rn _ _) = T.varStrictType (T.mkName fldNm)
-        (T.strictType T.notStrict (T.conT (T.mkName rn)))
+        (T.strictType T.notStrict
+          [t| $(T.conT (T.mkName rn)) $(anyTypeVar) |])
         where
           fldNm = '_' : recordFieldName num nm rn
 
@@ -76,27 +82,29 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
     T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [T.strictType T.notStrict (T.appT [t| Maybe |]
-                                    (T.conT (T.mkName inner)))]
+        [T.strictType T.notStrict
+          [t| Maybe ( $(T.conT (T.mkName inner)) $(anyTypeVar)) |]]
 
   Star (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
     where
-      newtypeCon = T.normalC name
-        [T.strictType T.notStrict (T.appT [t| Seq |]
-                                    (T.conT (T.mkName inner)))]
+      newtypeCon = T.normalC name [sq]
+        where
+          sq = T.strictType T.notStrict
+            [t| Seq ( $(T.conT (T.mkName inner)) $(anyTypeVar) ) |]
 
   Plus (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [anyType] cons derives
     where
-      cons = T.normalC name [tup]
+      cons = T.normalC name [ne]
         where
-          tup = T.strictType T.notStrict [t| ( $(ins), Seq $(ins)) |]
+          ne = T.strictType T.notStrict [t| NonEmpty $(ins) |]
             where
-              ins = T.varT (T.mkName inner)
+              ins = [t| $(T.conT (T.mkName inner)) $(anyTypeVar) |]
 
   where
     name = T.mkName nm
     anyType = T.PlainTV (T.mkName "a")
+    anyTypeVar = T.varT (T.mkName "a")
 
 

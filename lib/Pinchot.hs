@@ -5,6 +5,17 @@ module Pinchot
   , exclude
   , solo
   , pariah
+
+  -- * Non-empty
+  , NonEmpty(..)
+  , front
+  , rest
+  , flatten
+  , seqToNonEmpty
+  , prependSeq
+  , appendSeq
+  , append
+  , singleton
   
   -- * Production rules
   , RuleName
@@ -24,6 +35,9 @@ module Pinchot
   , label
   , (<?>)
 
+  -- * Creating data types corresponding to grammars
+  , syntaxTrees
+
   -- * Locations
   , Loc(..)
   , line
@@ -33,5 +47,7 @@ module Pinchot
   ) where
 
 import Pinchot.Intervals
+import Pinchot.NonEmpty
 import Pinchot.Rules
+import Pinchot.SyntaxTree
 import Pinchot.Types

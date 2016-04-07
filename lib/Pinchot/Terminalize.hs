@@ -20,12 +20,18 @@ import Pinchot.Rules
 -- declarations that reduce the rule and all its ancestors to
 -- terminal symbols.  Each rule gets a declaration named
 -- @t'RULE_NAME@ where @RULE_NAME@ is the name of the rule.  The
--- type of the declaration is
+-- type of the declaration is either
 --
 -- Production a -> Seq (t, a)
 --
+-- or
+--
+-- Production a -> NonEmpty (t, a)
+--
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and @t@ is the terminal token type.
+-- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- returned for productions that must always contain at least one
+-- terminal symbol; for those that can be empty, 'Seq' is returned.
 terminalizers
   :: Foldable c
   => Qualifier
@@ -47,12 +53,19 @@ terminalizers qual termType
 -- | For the given rule, creates declarations that reduce the rule
 -- to terminal symbols.  No ancestors are handled.  Each rule gets a
 -- declaration named @t'RULE_NAME@ where @RULE_NAME@ is the name of
--- the rule.  The type of the declaration is
+-- the rule.  The
+-- type of the declaration is either
 --
 -- Production a -> Seq (t, a)
 --
+-- or
+--
+-- Production a -> NonEmpty (t, a)
+--
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and @t@ is the terminal token type.
+-- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- returned for productions that must always contain at least one
+-- terminal symbol; for those that can be empty, 'Seq' is returned.
 terminalizer
   :: Qualifier
   -- ^ Qualifier for the module containing the data types created
@@ -75,12 +88,19 @@ terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
     expn = T.valD (T.varP $ T.mkName declName)
       (T.normalB (terminalizeRuleExp qual rule)) []
 
--- | For the given rule, returns an expression that has type
+-- | For the given rule, returns an expression that has type of
+-- either
 --
 -- Production a -> Seq (t, a)
 --
+-- or
+--
+-- Production a -> NonEmpty (t, a)
+--
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and t is the terminal token type.
+-- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- returned for productions that must always contain at least one
+-- terminal symbol; for those that can be empty, 'Seq' is returned.
 terminalizeRuleExp
   :: Qualifier
   -> Rule t
@@ -116,11 +136,19 @@ lookupName lkp n = case Map.lookup n lkp of
   Just r -> r
 
 -- | For the given rule, returns an expression that has type
+-- of either
 --
 -- Production a -> Seq (t, a)
 --
+-- or
+--
+-- Production a -> NonEmpty (t, a)
+--
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and t is the terminal token type.  Gets no ancestors.
+-- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- returned for productions that must always contain at least one
+-- terminal symbol; for those that can be empty, 'Seq' is returned.
+-- Gets no ancestors.
 terminalizeSingleRule
   :: Qualifier
   -- ^ Module qualifier for module containing the generated types
@@ -169,11 +197,20 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
   Star (Rule inner _ _) ->
     [| join . fmap $(T.varE (lookupName lkp inner)) . coerce |]
 
-  Plus (Rule inner _ _) ->
-    [| let getTermSeq = $(T.varE (lookupName lkp inner))
-           getTerms (e1, es) = getTermSeq e1 `mappend` getTermSeq es
-       in getTerms . coerce
-    |]
+  Plus r@(Rule inner _ _)
+    | atLeastOne r ->
+      [| let getTermNonEmpty = $(T.varE (lookupName lkp inner))
+             getTerms (e1, es) = join . fmap getTermNonEmpty
+              $ NonEmpty.NonEmpty e1 es
+         in getTerms . coerce
+      |]
+
+    | otherwise ->
+      [| let getTermSeq = $(T.varE (lookupName lkp inner))
+             getTerms (e1, es) = getTermSeq e1
+              `mappend` (join (fmap getTermSeq es))
+         in getTerms . coerce
+      |]
 
 terminalizeProductAllowsZero
   :: Qualifier
