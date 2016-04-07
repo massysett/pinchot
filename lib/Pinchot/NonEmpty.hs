@@ -45,3 +45,6 @@ appendSeq (NonEmpty a as) sq = NonEmpty a (as `mappend` sq)
 append :: NonEmpty a -> NonEmpty a -> NonEmpty a
 append (NonEmpty l1 ls) (NonEmpty r1 rs)
   = NonEmpty l1 (ls `mappend` (r1 <| rs))
+
+singleton :: a -> NonEmpty a
+singleton a = NonEmpty a Seq.empty
