@@ -189,3 +189,22 @@ terminalizeBranchRule lkp (Rule nm _ _) = do
   let getTerms = [| $(T.varE (lookupName lkp nm)) $(T.varE x) |]
   return (T.varP x, getTerms)
 
+-- | Examines a rule to determine whether when terminalizing it will
+-- always return at least one terminal symbol.
+atLeastOne
+  :: Rule t
+  -> Bool
+  -- ^ True if the rule will always have at least one terminal
+  -- symbol.
+atLeastOne (Rule _ _ ty) = case ty of
+  Terminal _ -> True
+  NonTerminal b1 bs -> branchAtLeastOne b1 && all branchAtLeastOne bs
+    where
+      branchAtLeastOne (Branch _ rs) = any atLeastOne rs
+  Terminals sq -> not . Seq.null $ sq
+  Wrap r -> atLeastOne r
+  Record rs -> any atLeastOne rs
+  Opt _ -> False
+  Star _ -> False
+  Plus r -> atLeastOne r
+
