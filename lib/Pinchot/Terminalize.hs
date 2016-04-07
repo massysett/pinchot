@@ -9,6 +9,7 @@ import Data.Foldable (foldlM, toList)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
+import qualified Language.Haskell.TH.Syntax as Syntax
 
 import Pinchot.NonEmpty (NonEmpty)
 import qualified Pinchot.NonEmpty as NonEmpty
@@ -129,30 +130,35 @@ terminalizeSingleRule
   -- will terminalize that rule.
   -> Rule t
   -> T.Q T.Exp
-terminalizeSingleRule qual lkp (Rule nm _ ty) = case ty of
-  Terminal _ -> [| Seq.singleton . coerce |]
+terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
+  Terminal _ -> [| NonEmpty.singleton . coerce |]
 
   NonTerminal b1 bs -> do
     x <- T.newName "x"
     let pat = T.varP x
-    let m1 = terminalizeBranch qual lkp b1
-        ms = fmap (terminalizeBranch qual lkp) . toList $ bs
+        tzr
+          | atLeastOne rule = terminalizeBranchAtLeastOne
+          | otherwise = terminalizeBranchAllowsZero
+        m1 = tzr qual lkp b1
+        ms = fmap (tzr qual lkp) . toList $ bs
     T.lamE [T.varP x] (T.caseE (T.varE x) (m1 : ms))
 
-  Terminals _ -> [| coerce |]
+  Terminals sq
+    | not . Seq.null $ sq ->
+        [| \s -> case NonEmpty.seqToNonEmpty . coerce $ s of
+                  Nothing -> error
+                    $ "terminals: is empty: " ++ $(Syntax.lift nm)
+                  Just ne -> ne
+        |]
+    | otherwise -> [| coerce |]
 
   Wrap (Rule inner _ _) ->
     [| $(T.varE (lookupName lkp inner)) . coerce |]
 
-  Record rs -> do
-    pairs <- traverse (terminalizeBranchRule lkp) . toList $ rs
-    let pat = T.conP (quald qual nm) (fmap fst pairs)
-        expn = case fmap snd pairs of
-          [] -> [| Seq.empty |]
-          x:xs -> foldl f x xs
-            where
-              f acc expn = [| $(acc) `mappend` $(expn) |]
-    [| \ $(pat) -> $(expn) |]
+  Record rs -> tzr qual nm lkp rs
+    where
+      tzr | atLeastOne rule = terminalizeRecordAtLeastOne
+          | otherwise = terminalizeRecordAllowsZero
 
   Opt (Rule inner _ _) ->
     [| maybe Seq.empty $(T.varE (lookupName lkp inner)) . coerce |]
@@ -165,31 +171,110 @@ terminalizeSingleRule qual lkp (Rule nm _ ty) = case ty of
            getTerms (e1, es) = getTermSeq e1 `mappend` getTermSeq es
        in getTerms . coerce
     |]
-    
 
-terminalizeBranch
+terminalizeRecordAllowsZero
+  :: Qualifier
+  -> RuleName
+  -> Map RuleName T.Name
+  -> Seq (Rule t)
+  -> T.Q T.Exp
+terminalizeRecordAllowsZero qual nm lkp rs = do
+  pairs <- traverse (terminalizeBranchRule lkp) . toList $ rs
+  let pat = T.conP (quald qual nm) (fmap (fst . snd) pairs)
+      expn = case fmap (snd . snd) pairs of
+        [] -> [| Seq.empty |]
+        x:xs -> foldl f x xs
+          where
+            f acc expn = [| $(acc) `mappend` $(expn) |]
+  [| \ $(pat) -> $(expn) |]
+    
+terminalizeRecordAtLeastOne
+  :: Qualifier
+  -> RuleName
+  -> Map RuleName T.Name
+  -> Seq (Rule t)
+  -> T.Q T.Exp
+terminalizeRecordAtLeastOne qual name lkp bs = do
+  pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
+  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
+      body = [| ( $(leadSeq) `NonEmpty.prependSeq` $(firstNonEmpty))
+                `NonEmpty.appendSeq` $(trailSeq) |]
+        where
+          (leadRules, lastRules) = span (atLeastOne . fst) pairs
+          (firstNonEmptyRule, trailRules) = case lastRules of
+            [] -> error $ "terminalizeRecordAtLeastOne: failure 1: " ++ name
+            x:xs -> (x, xs)
+          leadSeq = case fmap (snd . snd) leadRules of
+            [] -> [| Seq.empty |]
+            x:xs -> foldl f x xs
+              where
+                f acc expn = [| $(acc) `mappend` $(expn) |]
+          firstNonEmpty = [| $(snd . snd $ firstNonEmptyRule) |]
+
+          trailSeq = foldl f [| Seq.empty |] trailRules
+            where
+              f acc (rule, (_, expn))
+                | atLeastOne rule =
+                    [| $(acc) `mappend` NonEmpty.flatten $(expn) |]
+                | otherwise =
+                    [| $(acc) `mappend` $(expn) |]
+  [| \ $(pat) -> $(body) |]
+
+
+terminalizeBranchAllowsZero
   :: Qualifier
   -> Map RuleName T.Name
   -> Branch t
   -> T.Q T.Match
-terminalizeBranch qual lkp (Branch name bs) = do
+terminalizeBranchAllowsZero qual lkp (Branch name bs) = do
   pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
-  let pat = T.conP (quald qual name) (fmap fst pairs)
-      body = case fmap snd pairs of
+  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
+      body = case fmap (snd . snd) pairs of
         [] -> [| Seq.empty |]
         x:xs -> foldl f x xs
           where
             f acc expn = [| $(acc) `mappend` $(expn) |]
   T.match pat (T.normalB body) []
 
+terminalizeBranchAtLeastOne
+  :: Qualifier
+  -> Map RuleName T.Name
+  -> Branch t
+  -> T.Q T.Match
+terminalizeBranchAtLeastOne qual lkp (Branch name bs) = do
+  pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
+  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
+      body = [| ( $(leadSeq) `NonEmpty.prependSeq` $(firstNonEmpty))
+                `NonEmpty.appendSeq` $(trailSeq) |]
+        where
+          (leadRules, lastRules) = span (atLeastOne . fst) pairs
+          (firstNonEmptyRule, trailRules) = case lastRules of
+            [] -> error $ "terminalizeBranchAtLeastOne: failure 1: " ++ name
+            x:xs -> (x, xs)
+          leadSeq = case fmap (snd . snd) leadRules of
+            [] -> [| Seq.empty |]
+            x:xs -> foldl f x xs
+              where
+                f acc expn = [| $(acc) `mappend` $(expn) |]
+          firstNonEmpty = [| $(snd . snd $ firstNonEmptyRule) |]
+
+          trailSeq = foldl f [| Seq.empty |] trailRules
+            where
+              f acc (rule, (_, expn))
+                | atLeastOne rule =
+                    [| $(acc) `mappend` NonEmpty.flatten $(expn) |]
+                | otherwise =
+                    [| $(acc) `mappend` $(expn) |]
+  T.match pat (T.normalB body) []
+
 terminalizeBranchRule
   :: Map RuleName T.Name
   -> Rule t
-  -> T.Q (T.Q T.Pat, T.Q T.Exp)
-terminalizeBranchRule lkp (Rule nm _ _) = do
+  -> T.Q (Rule t, (T.Q T.Pat, T.Q T.Exp))
+terminalizeBranchRule lkp r@(Rule nm _ _) = do
   x <- T.newName $ "terminalizeBranchRule'" ++ nm
   let getTerms = [| $(T.varE (lookupName lkp nm)) $(T.varE x) |]
-  return (T.varP x, getTerms)
+  return (r, (T.varP x, getTerms))
 
 -- | Examines a rule to determine whether when terminalizing it will
 -- always return at least one terminal symbol.
