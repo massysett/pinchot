@@ -19,7 +19,7 @@ import Pinchot.Rules
 -- @t'RULE_NAME@ where @RULE_NAME@ is the name of the rule.  The
 -- type of the declaration is
 --
--- Production -> Seq t
+-- Production a -> Seq (t, a)
 --
 -- where @Production@ is the production corresponding to the given
 -- 'Rule', and @t@ is the terminal token type.
@@ -46,7 +46,7 @@ terminalizers qual termType
 -- declaration named @t'RULE_NAME@ where @RULE_NAME@ is the name of
 -- the rule.  The type of the declaration is
 --
--- Production -> Seq t
+-- Production a -> Seq (t, a)
 --
 -- where @Production@ is the production corresponding to the given
 -- 'Rule', and @t@ is the terminal token type.
@@ -65,14 +65,16 @@ terminalizer
 terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
   where
     declName = "t'" ++ nm
+    anyType = T.varT (T.mkName "a")
     sig = T.sigD (T.mkName declName)
-      [t| $(T.varT (quald qual nm)) -> Seq $(T.varT termType) |]
+      [t| $(T.varT (quald qual nm)) $(anyType)
+          -> Seq ($(T.varT termType), $anyType) |]
     expn = T.valD (T.varP $ T.mkName declName)
       (T.normalB (terminalizeRuleExp qual rule)) []
 
 -- | For the given rule, returns an expression that has type
 --
--- Production -> Seq t
+-- Production a -> Seq (t, a)
 --
 -- where @Production@ is the production corresponding to the given
 -- 'Rule', and t is the terminal token type.
@@ -112,7 +114,7 @@ lookupName lkp n = case Map.lookup n lkp of
 
 -- | For the given rule, returns an expression that has type
 --
--- Production -> Seq t
+-- Production a -> Seq (t, a)
 --
 -- where @Production@ is the production corresponding to the given
 -- 'Rule', and t is the terminal token type.  Gets no ancestors.

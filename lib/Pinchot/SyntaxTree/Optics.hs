@@ -38,7 +38,7 @@ ruleToOptics qual termName (Rule nm _ ty) = case ty of
   Terminal ivls -> terminalToOptics qual termName nm ivls
   NonTerminal b1 bs -> sequence $ nonTerminalToOptics qual nm b1 bs
   Terminals sq -> terminalsToOptics qual termName nm sq
-  Record sq -> return $ recordsToOptics qual nm sq
+  Record sq -> sequence $ recordsToOptics qual nm sq
   _ -> return []
   
 
@@ -203,36 +203,38 @@ recordsToOptics
   -> String
   -- ^ Rule name
   -> Seq (Rule t)
-  -> [T.Dec]
+  -> [T.Q T.Dec]
 recordsToOptics qual nm
   = concat . zipWith makeLens [(0 :: Int) ..] . toList
   where
     makeLens index (Rule inner _ _) = [ signature, function ]
       where
+        anyType = T.varT (T.mkName "a")
         fieldNm = recordFieldName index nm inner
         lensName = T.mkName fieldNm
-        signature = T.SigD lensName
-          $ (T.ConT ''Lens.Lens')
-          `T.AppT` (T.ConT (quald qual nm))
-          `T.AppT` (T.ConT (quald qual inner))
+        signature = T.sigD lensName
+          [t| Lens.Lens' ($(T.conT (quald qual nm)) $(anyType))
+                         ($(T.conT (quald qual inner)) $(anyType))
+          |]
 
-        function = T.FunD lensName [T.Clause [] (T.NormalB body) []]
+        function = T.funD lensName [T.clause [] (T.normalB body) []]
           where
             namedRec = T.mkName "_namedRec"
             namedNewVal = T.mkName "_namedNewVal"
-            body = (T.VarE 'Lens.lens) `T.AppE` getter `T.AppE` setter
+            body = (T.varE 'Lens.lens) `T.appE` getter `T.appE` setter
               where
-                getter = T.LamE [pat] expn
+                getter = T.lamE [pat] expn
                   where
-                    pat = T.VarP namedRec
-                    expn = (T.VarE (T.mkName ('_' : fieldNm)))
-                      `T.AppE` (T.VarE namedRec)
+                    pat = T.varP namedRec
+                    expn = (T.varE (T.mkName ('_' : fieldNm)))
+                      `T.appE` (T.varE namedRec)
 
-                setter = T.LamE [patRec, patNewVal] expn
+                setter = T.lamE [patRec, patNewVal] expn
                   where
-                    patRec = T.VarP namedRec
-                    patNewVal = T.VarP namedNewVal
-                    expn = T.RecUpdE (T.VarE namedRec)
-                      [ (T.mkName ('_' : fieldNm), T.VarE namedNewVal) ]
+                    patRec = T.varP namedRec
+                    patNewVal = T.varP namedNewVal
+                    expn = T.recUpdE (T.varE namedRec)
+                      [ return (T.mkName ('_' : fieldNm)
+                      , T.VarE namedNewVal) ]
 
 
