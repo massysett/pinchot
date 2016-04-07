@@ -135,12 +135,13 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
   NonTerminal b1 bs -> do
     x <- T.newName "x"
-    let pat = T.varP x
-        tzr
-          | atLeastOne rule = terminalizeBranchAtLeastOne
-          | otherwise = terminalizeBranchAllowsZero
-        m1 = tzr qual lkp b1
-        ms = fmap (tzr qual lkp) . toList $ bs
+    let fTzn | atLeastOne rule = terminalizeProductAtLeastOne
+             | otherwise = terminalizeProductAllowsZero
+        tzr (Branch name sq)
+          = fmap (\(pat, expn) -> T.match pat (T.normalB expn) [])
+          (fTzn qual lkp name sq)
+    m1 <- tzr b1
+    ms <- traverse tzr . toList $ bs
     T.lamE [T.varP x] (T.caseE (T.varE x) (m1 : ms))
 
   Terminals sq
@@ -155,10 +156,12 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
   Wrap (Rule inner _ _) ->
     [| $(T.varE (lookupName lkp inner)) . coerce |]
 
-  Record rs -> tzr qual nm lkp rs
+  Record rs -> do
+    (pat, expn) <- fTzr qual lkp nm rs
+    [| \ $(pat) -> $(expn) |]
     where
-      tzr | atLeastOne rule = terminalizeRecordAtLeastOne
-          | otherwise = terminalizeRecordAllowsZero
+      fTzr | atLeastOne rule = terminalizeProductAtLeastOne
+           | otherwise = terminalizeProductAllowsZero
 
   Opt (Rule inner _ _) ->
     [| maybe Seq.empty $(T.varE (lookupName lkp inner)) . coerce |]
@@ -172,84 +175,39 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
        in getTerms . coerce
     |]
 
-terminalizeRecordAllowsZero
+terminalizeProductAllowsZero
   :: Qualifier
-  -> RuleName
   -> Map RuleName T.Name
+  -> String
+  -- ^ Rule name or branch name, as applicable
   -> Seq (Rule t)
-  -> T.Q T.Exp
-terminalizeRecordAllowsZero qual nm lkp rs = do
-  pairs <- traverse (terminalizeBranchRule lkp) . toList $ rs
-  let pat = T.conP (quald qual nm) (fmap (fst . snd) pairs)
-      expn = case fmap (snd . snd) pairs of
-        [] -> [| Seq.empty |]
-        x:xs -> foldl f x xs
-          where
-            f acc expn = [| $(acc) `mappend` $(expn) |]
-  [| \ $(pat) -> $(expn) |]
-    
-terminalizeRecordAtLeastOne
-  :: Qualifier
-  -> RuleName
-  -> Map RuleName T.Name
-  -> Seq (Rule t)
-  -> T.Q T.Exp
-terminalizeRecordAtLeastOne qual name lkp bs = do
-  pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
-  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
-      body = [| ( $(leadSeq) `NonEmpty.prependSeq` $(firstNonEmpty))
-                `NonEmpty.appendSeq` $(trailSeq) |]
-        where
-          (leadRules, lastRules) = span (atLeastOne . fst) pairs
-          (firstNonEmptyRule, trailRules) = case lastRules of
-            [] -> error $ "terminalizeRecordAtLeastOne: failure 1: " ++ name
-            x:xs -> (x, xs)
-          leadSeq = case fmap (snd . snd) leadRules of
-            [] -> [| Seq.empty |]
-            x:xs -> foldl f x xs
-              where
-                f acc expn = [| $(acc) `mappend` $(expn) |]
-          firstNonEmpty = [| $(snd . snd $ firstNonEmptyRule) |]
-
-          trailSeq = foldl f [| Seq.empty |] trailRules
-            where
-              f acc (rule, (_, expn))
-                | atLeastOne rule =
-                    [| $(acc) `mappend` NonEmpty.flatten $(expn) |]
-                | otherwise =
-                    [| $(acc) `mappend` $(expn) |]
-  [| \ $(pat) -> $(body) |]
-
-
-terminalizeBranchAllowsZero
-  :: Qualifier
-  -> Map RuleName T.Name
-  -> Branch t
-  -> T.Q T.Match
-terminalizeBranchAllowsZero qual lkp (Branch name bs) = do
-  pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
+  -> T.Q (T.PatQ, T.ExpQ)
+terminalizeProductAllowsZero qual lkp name bs = do
+  pairs <- fmap toList . traverse (terminalizeProductRule lkp) $ bs
   let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
       body = case fmap (snd . snd) pairs of
         [] -> [| Seq.empty |]
         x:xs -> foldl f x xs
           where
             f acc expn = [| $(acc) `mappend` $(expn) |]
-  T.match pat (T.normalB body) []
+  return (pat, body)
 
-terminalizeBranchAtLeastOne
+terminalizeProductAtLeastOne
   :: Qualifier
   -> Map RuleName T.Name
-  -> Branch t
-  -> T.Q T.Match
-terminalizeBranchAtLeastOne qual lkp (Branch name bs) = do
-  pairs <- fmap toList . traverse (terminalizeBranchRule lkp) $ bs
+  -> String
+  -- ^ Rule name or branch name, as applicable
+  -> Seq (Rule t)
+  -> T.Q (T.PatQ, T.ExpQ)
+terminalizeProductAtLeastOne qual lkp name bs = do
+  pairs <- fmap toList . traverse (terminalizeProductRule lkp) $ bs
   let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
       body = [| ( $(leadSeq) `NonEmpty.prependSeq` $(firstNonEmpty))
                 `NonEmpty.appendSeq` $(trailSeq) |]
         where
           (leadRules, lastRules) = span (atLeastOne . fst) pairs
           (firstNonEmptyRule, trailRules) = case lastRules of
-            [] -> error $ "terminalizeBranchAtLeastOne: failure 1: " ++ name
+            [] -> error $ "terminalizeProductAtLeastOne: failure 1: " ++ name
             x:xs -> (x, xs)
           leadSeq = case fmap (snd . snd) leadRules of
             [] -> [| Seq.empty |]
@@ -265,14 +223,14 @@ terminalizeBranchAtLeastOne qual lkp (Branch name bs) = do
                     [| $(acc) `mappend` NonEmpty.flatten $(expn) |]
                 | otherwise =
                     [| $(acc) `mappend` $(expn) |]
-  T.match pat (T.normalB body) []
+  return (pat, body)
 
-terminalizeBranchRule
+terminalizeProductRule
   :: Map RuleName T.Name
   -> Rule t
   -> T.Q (Rule t, (T.Q T.Pat, T.Q T.Exp))
-terminalizeBranchRule lkp r@(Rule nm _ _) = do
-  x <- T.newName $ "terminalizeBranchRule'" ++ nm
+terminalizeProductRule lkp r@(Rule nm _ _) = do
+  x <- T.newName $ "terminalizeProductRule'" ++ nm
   let getTerms = [| $(T.varE (lookupName lkp nm)) $(T.varE x) |]
   return (r, (T.varP x, getTerms))
 
