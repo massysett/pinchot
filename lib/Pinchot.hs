@@ -38,6 +38,9 @@ module Pinchot
   -- * Creating data types corresponding to grammars
   , syntaxTrees
 
+  -- ** Wrappers
+  , wrappedInstances
+
   -- * Locations
   , Loc(..)
   , line
@@ -50,4 +53,5 @@ import Pinchot.Intervals
 import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.SyntaxTree
+import Pinchot.SyntaxTree.Wrappers
 import Pinchot.Types

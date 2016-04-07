@@ -7,6 +7,7 @@ import Data.Sequence (Seq)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 
+import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.Types
 
@@ -16,7 +17,10 @@ import Pinchot.Types
 -- ancestors, if there is an instance.  Only 'Wrap', 'Opt', 'Plus'
 -- 'Star' get instances of 'Wrapped'.  Even though 'Terminal' and
 -- 'Terminals' are both @newtype@s, they don't get instances of
--- 'Lens.Wrapped'; instead, they get a 'Lens.Prism'.  This must be
+-- 'Lens.Wrapped'.  You may choose to make a 'Lens.Prism' for those
+-- using 'Pinchot.SyntaxTree.Optics.ruleToOptics'.
+--
+-- This must be
 -- spliced in the same module in which the syntax tree types are
 -- created; this way, no orphans are created.  Since ancestors are
 -- included, you can get the entire tree of types that you need by
@@ -35,8 +39,8 @@ wrappedInstances
 -- | Creates a 'Lens.Wrapped' instance for the 'Rule', if there is
 -- one.  Only 'Wrap', 'Opt', and 'Star' get instances of 'Wrapped'.
 -- Even though 'Terminal' and 'Terminals' are both @newtype@s, they
--- don't get instances of 'Lens.Wrapped'; instead, they get a
--- 'Lens.Prism'.  This must be done in the same module in which the
+-- don't get instances of 'Lens.Wrapped'.
+-- 'This must be spliced in the same module in which the
 -- syntax tree types are created.
 
 singleWrappedInstance
@@ -60,11 +64,13 @@ makeWrapped wrappedType nm = T.InstanceD [] typ decs
   where
     name = T.mkName nm
     local = T.mkName "_x"
-    typ = (T.ConT ''Lens.Wrapped) `T.AppT` (T.ConT name)
+    typ = (T.ConT ''Lens.Wrapped) `T.AppT`
+      ((T.ConT name) `T.AppT` (T.VarT (T.mkName "a")))
     decs = [assocType, wrapper]
       where
         assocType = T.TySynInstD ''Lens.Unwrapped
-          (T.TySynEqn [T.ConT name] wrappedType)
+          (T.TySynEqn [T.ConT name `T.AppT` (T.VarT (T.mkName "a"))]
+                      wrappedType)
         wrapper = T.FunD 'Lens._Wrapped
           [T.Clause [] (T.NormalB body) []]
           where
@@ -89,7 +95,8 @@ wrappedOpt
   -> T.Dec
 wrappedOpt wrappedName = makeWrapped maybeName
   where
-    maybeName = (T.ConT ''Maybe) `T.AppT` (T.ConT (T.mkName wrappedName))
+    maybeName = (T.ConT ''Maybe) `T.AppT`
+      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedStar
   :: String
@@ -99,7 +106,8 @@ wrappedStar
   -> T.Dec
 wrappedStar wrappedName = makeWrapped innerName
   where
-    innerName = (T.ConT ''Seq) `T.AppT` (T.ConT (T.mkName wrappedName))
+    innerName = (T.ConT ''Seq) `T.AppT`
+      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedPlus
   :: String
@@ -109,10 +117,9 @@ wrappedPlus
   -> T.Dec
 wrappedPlus wrappedName = makeWrapped tupName
   where
-    tupName = (T.TupleT 2)
-      `T.AppT` (T.ConT (T.mkName wrappedName))
-      `T.AppT` ((T.ConT ''Seq) `T.AppT` (T.ConT (T.mkName wrappedName)))
-
+    tupName = T.ConT ''NonEmpty
+      `T.AppT` ((T.ConT (T.mkName wrappedName))
+                  `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedWrap
   :: String
@@ -122,4 +129,5 @@ wrappedWrap
   -> T.Dec
 wrappedWrap wrappedName = makeWrapped innerName
   where
-    innerName = T.ConT (T.mkName wrappedName)
+    innerName =
+      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
