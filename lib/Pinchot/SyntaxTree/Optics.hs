@@ -13,6 +13,35 @@ import Pinchot.Rules
 import Pinchot.Types
 import Pinchot.Intervals
 
+-- | Creates optics declarations for a multiple 'Rule's, if optics can
+-- be made for the 'Rule':
+--
+-- * 'Terminal' gets a single 'Lens.Prism'
+--
+-- * 'NonTerminal' gets a 'Lens.Prism' for each constructor
+--
+-- * 'Terminals' gets a single 'Lens.Prism'
+--
+-- * 'Record' gets a single 'Lens.Lens'
+--
+-- * 'Wrap', 'Opt', 'Star', and 'Plus' do not get optics.
+--
+-- Each rule in the sequence of 'Rule', as well as all ancestors of
+-- those 'Rule's, will be handled.
+rulesToOptics
+  :: Syntax.Lift t
+  => Qualifier
+  -- ^ Qualifier for module containing the data types that will get
+  -- optics
+  -> T.Name
+  -- ^ Type name for the terminal
+  -> Seq (Rule t)
+  -> T.Q [T.Dec]
+rulesToOptics qual termName
+  = fmap concat
+  . traverse (ruleToOptics qual termName)
+  . families
+
 -- | Creates optics declarations for a single 'Rule', if optics can
 -- be made for the 'Rule':
 --
@@ -59,10 +88,10 @@ terminalToOptics
   -> Intervals t
   -> T.Q [T.Dec]
 terminalToOptics qual termName nm ivls = do
-  e1 <- T.sigD (T.mkName ('_':nm))
+  e1 <- T.sigD (T.mkName ('_':nm)) (forallA
     [t| Lens.Prism' ( $(T.conT termName), $(anyType) )
                     ($(T.conT (quald qual nm)) $(anyType))
-    |]
+    |])
   
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
@@ -99,8 +128,8 @@ nonTerminalToOptics qual nm b1 bsSeq
         rules = toList rulesSeq
         prismName = T.mkName ('_' : inner)
         signature = T.sigD prismName
-          [t| Lens.Prism' ($(T.conT (quald qual nm)) $(anyType))
-                          $(fieldsType) |]
+          (forallA [t| Lens.Prism' ($(T.conT (quald qual nm)) $(anyType))
+                          $(fieldsType) |])
           where
             fieldsType = case rules of
               [] -> T.tupleT 0
@@ -178,9 +207,9 @@ terminalsToOptics
   -> Seq t
   -> T.Q [T.Dec]
 terminalsToOptics qual termName nm sq = do
-  e1 <- T.sigD (T.mkName ('_':nm)) 
+  e1 <- T.sigD (T.mkName ('_':nm)) (forallA
     [t| Lens.Prism' (Seq ( $(T.conT termName), $(anyType) ))
-                    ( $(T.conT (quald qual nm)), $(anyType)) |]
+                    ($(T.conT (quald qual nm)) $(anyType)) |])
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
@@ -188,7 +217,7 @@ terminalsToOptics qual termName nm sq = do
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
     fetchName = T.varE (T.mkName "_x")
-    ctor = T.conE (T.mkName nm)
+    ctor = T.conE (quald qual nm)
     expn = [| let fetch = coerce
                   store _term
                     | $(liftSeq sq) == fmap fst _term = Just ($ctor _term)
@@ -212,10 +241,10 @@ recordsToOptics qual nm
         anyType = T.varT (T.mkName "a")
         fieldNm = recordFieldName index nm inner
         lensName = T.mkName fieldNm
-        signature = T.sigD lensName
+        signature = T.sigD lensName (forallA
           [t| Lens.Lens' ($(T.conT (quald qual nm)) $(anyType))
                          ($(T.conT (quald qual inner)) $(anyType))
-          |]
+          |])
 
         function = T.funD lensName [T.clause [] (T.normalB body) []]
           where
@@ -226,7 +255,7 @@ recordsToOptics qual nm
                 getter = T.lamE [pat] expn
                   where
                     pat = T.varP namedRec
-                    expn = (T.varE (T.mkName ('_' : fieldNm)))
+                    expn = (T.varE (quald qual ('_' : fieldNm)))
                       `T.appE` (T.varE namedRec)
 
                 setter = T.lamE [patRec, patNewVal] expn
@@ -234,7 +263,8 @@ recordsToOptics qual nm
                     patRec = T.varP namedRec
                     patNewVal = T.varP namedNewVal
                     expn = T.recUpdE (T.varE namedRec)
-                      [ return (T.mkName ('_' : fieldNm)
-                      , T.VarE namedNewVal) ]
+                      [ return ( quald qual ('_' : fieldNm)
+                               , T.VarE namedNewVal) ]
 
-
+forallA :: T.TypeQ -> T.TypeQ
+forallA = T.forallT [T.PlainTV (T.mkName "a")] (return [])
