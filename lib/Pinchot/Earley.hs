@@ -165,7 +165,7 @@ allRulesRecord prefix termName ruleSeq
   = sequence [T.dataD (return []) (T.mkName nameStr) tys [con] []]
   where
     nameStr = "Productions"
-    tys = [T.PlainTV (T.mkName "r")]
+    tys = [T.PlainTV (T.mkName "r"), T.PlainTV (T.mkName "a")]
     con = T.recC (T.mkName nameStr)
         (fmap mkRecord . toList . families $ ruleSeq)
     mkRecord (Rule ruleNm _ _) = T.varStrictType recName st
@@ -173,11 +173,11 @@ allRulesRecord prefix termName ruleSeq
         recName = T.mkName ("a'" ++ ruleNm)
         st = T.strictType T.notStrict ty
           where
-            ty = (T.conT ''Text.Earley.Prod)
-              `T.appT` (T.varT (T.mkName "r"))
-              `T.appT` (T.conT ''String)
-              `T.appT` (T.conT termName)
-              `T.appT` (T.conT (T.mkName nameWithPrefix))
+            ty = [t| Text.Earley.Prod $(T.varT (T.mkName "r"))
+                      String
+                      $(T.conT termName)
+                      ( $(T.conT (T.mkName nameWithPrefix))
+                            $(T.varT (T.mkName "a"))) |]
             nameWithPrefix = case prefix of
               [] -> ruleNm
               _ -> prefix ++ '.' : ruleNm

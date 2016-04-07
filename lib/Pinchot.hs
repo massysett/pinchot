@@ -37,6 +37,7 @@ module Pinchot
 
   -- * Creating data types corresponding to grammars
   , syntaxTrees
+  , allRulesRecord
 
   -- ** Wrappers and optics
   , wrappedInstances
@@ -51,6 +52,7 @@ module Pinchot
   , Locator
   ) where
 
+import Pinchot.Earley
 import Pinchot.Intervals
 import Pinchot.NonEmpty
 import Pinchot.Rules
