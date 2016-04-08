@@ -213,7 +213,7 @@ terminalsToOptics
   -> T.Q [T.Dec]
 terminalsToOptics qual termName nm sq = do
   e1 <- T.sigD (T.mkName ('_':nm)) (T.forallT
-        [ T.PlainTV (T.mkName "a")] (T.cxt [ [t| Eq $(anyType) |] ])
+        [ T.PlainTV (T.mkName "a")] (return [])
     [t| Lens.Prism'
           (Seq ( $(T.conT termName), $(anyType) ))
           ($(T.conT (quald qual nm)) $(T.conT termName) $(anyType)) |])
