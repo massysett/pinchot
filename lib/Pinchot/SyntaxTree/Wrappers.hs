@@ -28,7 +28,7 @@ wrappedInstances
   :: Seq (Rule t)
   -> T.DecsQ
 wrappedInstances
-  = return
+  = sequence
   . catMaybes
   . toList
   . fmap singleWrappedInstance
@@ -42,10 +42,10 @@ wrappedInstances
 
 singleWrappedInstance
   :: Rule t
-  -> Maybe (T.Dec)
+  -> Maybe (T.Q T.Dec)
 singleWrappedInstance (Rule nm _ ty) = case ty of
-  -- Terminal _ -> Just $ wrappedTerminal nm
-  -- Terminals _ -> Just $ wrappedTerminals nm
+  Terminal _ -> Just $ wrappedTerminal nm
+  Terminals _ -> Just $ wrappedTerminals nm
   Wrap (Rule inner _ _) -> Just $ wrappedWrap inner nm
   Opt (Rule inner _ _) -> Just $ wrappedOpt inner nm
   Star (Rule inner _ _) -> Just $ wrappedStar inner nm
@@ -54,97 +54,105 @@ singleWrappedInstance (Rule nm _ ty) = case ty of
 
 
 makeWrapped
-  :: T.Type
+  :: T.TypeQ
   -- ^ Name of wrapped type
   -> String
   -- ^ Name of wrapper type
-  -> T.Dec
-makeWrapped wrappedType nm = T.InstanceD [] typ decs
+  -> T.Q T.Dec
+makeWrapped wrappedType nm = T.instanceD (return []) typ decs
   where
     name = T.mkName nm
     local = T.mkName "_x"
-    typ = (T.ConT ''Lens.Wrapped) `T.AppT`
-      ((T.ConT name)
-        `T.AppT` (T.VarT (T.mkName "t"))
-        `T.AppT` (T.VarT (T.mkName "a")))
+    typ = (T.conT ''Lens.Wrapped) `T.appT`
+      ((T.conT name)
+        `T.appT` (T.varT (T.mkName "t"))
+        `T.appT` (T.varT (T.mkName "a")))
     decs = [assocType, wrapper]
       where
-        assocType = T.TySynInstD ''Lens.Unwrapped
-          (T.TySynEqn [T.ConT name
-            `T.AppT` (T.VarT (T.mkName "t"))
-            `T.AppT` (T.VarT (T.mkName "a"))]
+        assocType = T.tySynInstD ''Lens.Unwrapped
+          (T.tySynEqn [T.conT name
+            `T.appT` (T.varT (T.mkName "t"))
+            `T.appT` (T.varT (T.mkName "a"))]
                       wrappedType)
-        wrapper = T.FunD 'Lens._Wrapped
-          [T.Clause [] (T.NormalB body) []]
+        wrapper = T.funD 'Lens._Wrapped
+          [T.clause [] (T.normalB body) []]
           where
-            body = (T.VarE 'Lens.iso)
-              `T.AppE` unwrap
-              `T.AppE` doWrap
+            body = (T.varE 'Lens.iso)
+              `T.appE` unwrap
+              `T.appE` doWrap
               where
-                unwrap = T.LamE [lambPat] (T.VarE local)
+                unwrap = T.lamE [lambPat] (T.varE local)
                   where
-                    lambPat = T.ConP name [T.VarP local]
-                doWrap = T.LamE [lambPat] expn
+                    lambPat = T.conP name [T.varP local]
+                doWrap = T.lamE [lambPat] expn
                   where
-                    expn = (T.ConE name)
-                      `T.AppE` (T.VarE local)
-                    lambPat = T.VarP local
+                    expn = (T.conE name)
+                      `T.appE` (T.varE local)
+                    lambPat = T.varP local
 
 wrappedOpt
   :: String
   -- ^ Wrapped rule name
   -> String
   -- ^ Wrapping Rule name
-  -> T.Dec
+  -> T.Q T.Dec
 wrappedOpt wrappedName = makeWrapped maybeName
   where
-    maybeName = (T.ConT ''Maybe)
-      `T.AppT`
-      ((T.ConT (T.mkName wrappedName))
-        `T.AppT` (T.VarT (T.mkName "t"))
-        `T.AppT` (T.VarT (T.mkName "a")))
+    maybeName = (T.conT ''Maybe)
+      `T.appT`
+      ((T.conT (T.mkName wrappedName))
+        `T.appT` (T.varT (T.mkName "t"))
+        `T.appT` (T.varT (T.mkName "a")))
 
 wrappedTerminal
   :: String
   -- ^ Wrapper Rule name
-  -> T.Dec
-wrappedTerminal = undefined
+  -> T.Q T.Dec
+wrappedTerminal = makeWrapped
+  [t| ( $(T.varT (T.mkName "t")), $(T.varT (T.mkName "a")) ) |]
+
+wrappedTerminals
+  :: String
+  -- ^ Wrapper Rule name
+  -> T.Q T.Dec
+wrappedTerminals = makeWrapped
+  [t| Seq ( $(T.varT (T.mkName "t")), $(T.varT (T.mkName "a")) ) |]
 
 wrappedStar
   :: String
   -- ^ Wrapped rule name
   -> String
   -- ^ Wrapping Rule name
-  -> T.Dec
+  -> T.Q T.Dec
 wrappedStar wrappedName = makeWrapped innerName
   where
-    innerName = (T.ConT ''Seq) `T.AppT`
-      ((T.ConT (T.mkName wrappedName))
-        `T.AppT` (T.VarT (T.mkName "t"))
-        `T.AppT` (T.VarT (T.mkName "a")))
+    innerName = (T.conT ''Seq) `T.appT`
+      ((T.conT (T.mkName wrappedName))
+        `T.appT` (T.varT (T.mkName "t"))
+        `T.appT` (T.varT (T.mkName "a")))
 
 wrappedPlus
   :: String
   -- ^ Wrapped rule name
   -> String
   -- ^ Wrapping Rule name
-  -> T.Dec
+  -> T.Q T.Dec
 wrappedPlus wrappedName = makeWrapped tupName
   where
-    tupName = T.ConT ''NonEmpty
-      `T.AppT` ((T.ConT (T.mkName wrappedName))
-                  `T.AppT` (T.VarT (T.mkName "t"))
-                  `T.AppT` (T.VarT (T.mkName "a")))
+    tupName = T.conT ''NonEmpty
+      `T.appT` ((T.conT (T.mkName wrappedName))
+                  `T.appT` (T.varT (T.mkName "t"))
+                  `T.appT` (T.varT (T.mkName "a")))
 
 wrappedWrap
   :: String
   -- ^ Wrapped rule name
   -> String
   -- ^ Wrapping Rule name
-  -> T.Dec
+  -> T.Q T.Dec
 wrappedWrap wrappedName = makeWrapped innerName
   where
     innerName =
-      ((T.ConT (T.mkName wrappedName))
-        `T.AppT` (T.VarT (T.mkName "t"))
-        `T.AppT` (T.VarT (T.mkName "a")))
+      ((T.conT (T.mkName wrappedName))
+        `T.appT` (T.varT (T.mkName "t"))
+        `T.appT` (T.varT (T.mkName "a")))
