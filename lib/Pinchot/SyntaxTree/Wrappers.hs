@@ -14,11 +14,9 @@ import Pinchot.Types
 -- # Wrapped
 
 -- | Creates a 'Lens.Wrapped' instance for each 'Rule' and its
--- ancestors, if there is an instance.  Only 'Wrap', 'Opt', 'Plus'
--- 'Star' get instances of 'Wrapped'.  Even though 'Terminal' and
--- 'Terminals' are both @newtype@s, they don't get instances of
--- 'Lens.Wrapped'.  You may choose to make a 'Lens.Prism' for those
--- using 'Pinchot.SyntaxTree.Optics.ruleToOptics'.
+-- ancestors, if there is an instance.  Only 'Terminal, 'Terminals',
+-- 'Wrap', 'Opt', 'Plus'
+-- 'Star' get instances of 'Wrapped'.
 --
 -- This must be
 -- spliced in the same module in which the syntax tree types are
@@ -37,9 +35,8 @@ wrappedInstances
   . families
 
 -- | Creates a 'Lens.Wrapped' instance for the 'Rule', if there is
--- one.  Only 'Wrap', 'Opt', and 'Star' get instances of 'Wrapped'.
--- Even though 'Terminal' and 'Terminals' are both @newtype@s, they
--- don't get instances of 'Lens.Wrapped'.
+-- one.  Only 'Terminal', 'Terminals', 'Wrap', 'Opt', 'Star', and 'Plus'
+-- get instances of 'Wrapped'.
 -- 'This must be spliced in the same module in which the
 -- syntax tree types are created.
 
@@ -47,6 +44,8 @@ singleWrappedInstance
   :: Rule t
   -> Maybe (T.Dec)
 singleWrappedInstance (Rule nm _ ty) = case ty of
+  -- Terminal _ -> Just $ wrappedTerminal nm
+  -- Terminals _ -> Just $ wrappedTerminals nm
   Wrap (Rule inner _ _) -> Just $ wrappedWrap inner nm
   Opt (Rule inner _ _) -> Just $ wrappedOpt inner nm
   Star (Rule inner _ _) -> Just $ wrappedStar inner nm
@@ -104,6 +103,12 @@ wrappedOpt wrappedName = makeWrapped maybeName
       ((T.ConT (T.mkName wrappedName))
         `T.AppT` (T.VarT (T.mkName "t"))
         `T.AppT` (T.VarT (T.mkName "a")))
+
+wrappedTerminal
+  :: String
+  -- ^ Wrapper Rule name
+  -> T.Dec
+wrappedTerminal = undefined
 
 wrappedStar
   :: String
