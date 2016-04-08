@@ -88,15 +88,17 @@ terminalToOptics
   -> Intervals t
   -> T.Q [T.Dec]
 terminalToOptics qual termName nm ivls = do
-  e1 <- T.sigD (T.mkName ('_':nm)) (forallA
+  e1 <- T.sigD (T.mkName ('_':nm))
+    $ T.forallT [ T.PlainTV (T.mkName "a")] (return [])
     [t| Lens.Prism' ( $(T.conT termName), $(anyType) )
-                    ($(T.conT (quald qual nm)) $(anyType))
-    |])
+                    ($(T.conT (quald qual nm)) $(T.conT termName) $(anyType))
+    |]
   
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
     anyType = T.varT (T.mkName "a")
+    charType = T.varT (T.mkName "t")
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
     fetchName = T.varE (T.mkName "_x")
@@ -124,20 +126,23 @@ nonTerminalToOptics qual nm b1 bsSeq
     bs = toList bsSeq
     makePrism (Branch inner rulesSeq) = [ signature, binding ]
       where
+        charType = T.varT (T.mkName "t")
         anyType = T.varT (T.mkName "a")
         rules = toList rulesSeq
         prismName = T.mkName ('_' : inner)
         signature = T.sigD prismName
-          (forallA [t| Lens.Prism' ($(T.conT (quald qual nm)) $(anyType))
-                          $(fieldsType) |])
+          (forallA [t| Lens.Prism'
+              ($(T.conT (quald qual nm)) $(charType) $(anyType))
+              $(fieldsType) |])
           where
             fieldsType = case rules of
               [] -> T.tupleT 0
-              Rule r1 _ _ : [] -> [t| $(T.conT (quald qual r1)) $(anyType) |]
+              Rule r1 _ _ : [] -> [t| $(T.conT (quald qual r1))
+                $(charType) $(anyType) |]
               rs -> foldl addType (T.tupleT (length rs)) rs
                 where
                   addType soFar (Rule r _ _) = soFar `T.appT`
-                    [t| $(T.conT (quald qual r)) $(anyType) |]
+                    [t| $(T.conT (quald qual r)) $(charType) $(anyType) |]
         binding = T.valD (T.varP prismName) body []
           where
             body = T.normalB
@@ -207,12 +212,15 @@ terminalsToOptics
   -> Seq t
   -> T.Q [T.Dec]
 terminalsToOptics qual termName nm sq = do
-  e1 <- T.sigD (T.mkName ('_':nm)) (forallA
-    [t| Lens.Prism' (Seq ( $(T.conT termName), $(anyType) ))
-                    ($(T.conT (quald qual nm)) $(anyType)) |])
+  e1 <- T.sigD (T.mkName ('_':nm)) (T.forallT
+        [ T.PlainTV (T.mkName "a")] (T.cxt [ [t| Eq $(anyType) |] ])
+    [t| Lens.Prism'
+          (Seq ( $(T.conT termName), $(anyType) ))
+          ($(T.conT (quald qual nm)) $(T.conT termName) $(anyType)) |])
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
+    charType = T.varT (T.mkName "t")
     anyType = T.varT (T.mkName "a")
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
@@ -238,12 +246,13 @@ recordsToOptics qual nm
   where
     makeLens index (Rule inner _ _) = [ signature, function ]
       where
+        charType = T.varT (T.mkName "t")
         anyType = T.varT (T.mkName "a")
         fieldNm = recordFieldName index nm inner
         lensName = T.mkName fieldNm
         signature = T.sigD lensName (forallA
-          [t| Lens.Lens' ($(T.conT (quald qual nm)) $(anyType))
-                         ($(T.conT (quald qual inner)) $(anyType))
+          [t| Lens.Lens' ($(T.conT (quald qual nm)) $(charType) $(anyType))
+                         ($(T.conT (quald qual inner)) $(charType) $(anyType))
           |])
 
         function = T.funD lensName [T.clause [] (T.normalB body) []]
@@ -267,4 +276,5 @@ recordsToOptics qual nm
                                , T.VarE namedNewVal) ]
 
 forallA :: T.TypeQ -> T.TypeQ
-forallA = T.forallT [T.PlainTV (T.mkName "a")] (return [])
+forallA = T.forallT [ T.PlainTV (T.mkName "t")
+                    , T.PlainTV (T.mkName "a")] (return [])

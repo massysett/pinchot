@@ -33,9 +33,10 @@ branchConstructor (Branch nm rules) = T.normalC name fields
   where
     name = T.mkName nm
     mkField (Rule n _ _) = T.strictType T.notStrict
-      [t| $(T.conT (T.mkName n)) $(anyTypeVar) |]
+      [t| $(T.conT (T.mkName n)) $(charTypeVar) $(anyTypeVar) |]
     fields = toList . fmap mkField $ rules
     anyTypeVar = T.varT (T.mkName "a")
+    charTypeVar = T.varT (T.mkName "t")
 
 -- | Makes the top-level declaration for a given rule.
 ruleToType
@@ -46,65 +47,71 @@ ruleToType
   -> Rule t
   -> T.Q T.Dec
 ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
-  Terminal _ -> T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
+  Terminal _ ->
+    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict
-          [t| ( $(T.conT typeName), $(T.varT (T.mkName "a")) ) |] ]
+          [t| ( $(charTypeVar), $(anyTypeVar) ) |] ]
 
-  NonTerminal b1 bs -> T.dataD (T.cxt []) name [anyType] cons derives
+  NonTerminal b1 bs -> T.dataD (T.cxt []) name [charType, anyType] cons derives
     where
       cons = branchConstructor b1 : toList (fmap branchConstructor bs)
 
-  Terminals _ -> T.newtypeD (T.cxt []) name [anyType] cons derives
+  Terminals _ -> T.newtypeD (T.cxt []) name [charType, anyType] cons derives
     where
       cons = T.normalC name
         [T.strictType T.notStrict
-          [t| Seq ( ( $(T.conT typeName), $(T.varT (T.mkName "a")))) |] ]
+          [t| Seq ( ( $(charTypeVar), $(anyTypeVar))) |] ]
 
   Wrap (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [ T.strictType T.notStrict
-            [t| $(T.conT (T.mkName inner)) $(anyTypeVar) |] ]
+            [t| $(T.conT (T.mkName inner)) $(charTypeVar) $(anyTypeVar) |] ]
 
-  Record sq -> T.dataD (T.cxt []) name [anyType] [ctor] derives
+  Record sq -> T.dataD (T.cxt []) name [charType, anyType] [ctor] derives
     where
       ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
       mkField num (Rule rn _ _) = T.varStrictType (T.mkName fldNm)
         (T.strictType T.notStrict
-          [t| $(T.conT (T.mkName rn)) $(anyTypeVar) |])
+          [t| $(T.conT (T.mkName rn)) $(charTypeVar) $(anyTypeVar) |])
         where
           fldNm = '_' : recordFieldName num nm rn
 
   Opt (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict
-          [t| Maybe ( $(T.conT (T.mkName inner)) $(anyTypeVar)) |]]
+          [t| Maybe ( $(T.conT (T.mkName inner)) $(charTypeVar)
+                                                 $(anyTypeVar)) |]]
 
   Star (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name [sq]
         where
           sq = T.strictType T.notStrict
-            [t| Seq ( $(T.conT (T.mkName inner)) $(anyTypeVar) ) |]
+            [t| Seq ( $(T.conT (T.mkName inner)) $(charTypeVar)
+                                                 $(anyTypeVar) ) |]
 
   Plus (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [anyType] cons derives
+    T.newtypeD (T.cxt []) name [charType, anyType] cons derives
     where
       cons = T.normalC name [ne]
         where
           ne = T.strictType T.notStrict [t| NonEmpty $(ins) |]
             where
-              ins = [t| $(T.conT (T.mkName inner)) $(anyTypeVar) |]
+              ins = [t| $(T.conT (T.mkName inner))
+                $(charTypeVar) $(anyTypeVar) |]
 
   where
     name = T.mkName nm
     anyType = T.PlainTV (T.mkName "a")
     anyTypeVar = T.varT (T.mkName "a")
+    charType = T.PlainTV (T.mkName "t")
+    charTypeVar = T.varT (T.mkName "t")
 
 

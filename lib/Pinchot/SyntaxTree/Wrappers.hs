@@ -65,11 +65,15 @@ makeWrapped wrappedType nm = T.InstanceD [] typ decs
     name = T.mkName nm
     local = T.mkName "_x"
     typ = (T.ConT ''Lens.Wrapped) `T.AppT`
-      ((T.ConT name) `T.AppT` (T.VarT (T.mkName "a")))
+      ((T.ConT name)
+        `T.AppT` (T.VarT (T.mkName "t"))
+        `T.AppT` (T.VarT (T.mkName "a")))
     decs = [assocType, wrapper]
       where
         assocType = T.TySynInstD ''Lens.Unwrapped
-          (T.TySynEqn [T.ConT name `T.AppT` (T.VarT (T.mkName "a"))]
+          (T.TySynEqn [T.ConT name
+            `T.AppT` (T.VarT (T.mkName "t"))
+            `T.AppT` (T.VarT (T.mkName "a"))]
                       wrappedType)
         wrapper = T.FunD 'Lens._Wrapped
           [T.Clause [] (T.NormalB body) []]
@@ -95,8 +99,11 @@ wrappedOpt
   -> T.Dec
 wrappedOpt wrappedName = makeWrapped maybeName
   where
-    maybeName = (T.ConT ''Maybe) `T.AppT`
-      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
+    maybeName = (T.ConT ''Maybe)
+      `T.AppT`
+      ((T.ConT (T.mkName wrappedName))
+        `T.AppT` (T.VarT (T.mkName "t"))
+        `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedStar
   :: String
@@ -107,7 +114,9 @@ wrappedStar
 wrappedStar wrappedName = makeWrapped innerName
   where
     innerName = (T.ConT ''Seq) `T.AppT`
-      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
+      ((T.ConT (T.mkName wrappedName))
+        `T.AppT` (T.VarT (T.mkName "t"))
+        `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedPlus
   :: String
@@ -119,6 +128,7 @@ wrappedPlus wrappedName = makeWrapped tupName
   where
     tupName = T.ConT ''NonEmpty
       `T.AppT` ((T.ConT (T.mkName wrappedName))
+                  `T.AppT` (T.VarT (T.mkName "t"))
                   `T.AppT` (T.VarT (T.mkName "a")))
 
 wrappedWrap
@@ -130,4 +140,6 @@ wrappedWrap
 wrappedWrap wrappedName = makeWrapped innerName
   where
     innerName =
-      ((T.ConT (T.mkName wrappedName)) `T.AppT` (T.VarT (T.mkName "a")))
+      ((T.ConT (T.mkName wrappedName))
+        `T.AppT` (T.VarT (T.mkName "t"))
+        `T.AppT` (T.VarT (T.mkName "a")))

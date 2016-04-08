@@ -81,15 +81,18 @@ terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
   where
     declName = "t'" ++ nm
     anyType = T.varT (T.mkName "a")
+    charType = T.varT (T.mkName "t")
     sig
       | atLeastOne rule = T.sigD (T.mkName declName)
-          . T.forallT [(T.PlainTV (T.mkName "a"))] (return [])
-          $ [t| $(T.conT (quald qual nm)) $(anyType)
-            -> NonEmpty ($(T.conT termType), $(anyType)) |]
+          . T.forallT [T.PlainTV (T.mkName "t")
+                      , T.PlainTV (T.mkName "a")] (return [])
+          $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
+            -> NonEmpty ($(charType), $(anyType)) |]
       | otherwise = T.sigD (T.mkName declName)
-          . T.forallT [(T.PlainTV (T.mkName "a"))] (return [])
-          $ [t| $(T.conT (quald qual nm)) $(anyType)
-              -> Seq ($(T.conT termType), $(anyType)) |]
+          . T.forallT [ T.PlainTV (T.mkName "t")
+                      , T.PlainTV (T.mkName "a")] (return [])
+          $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
+              -> Seq ($(charType), $(anyType)) |]
     expn = T.valD (T.varP $ T.mkName declName)
       (T.normalB (terminalizeRuleExp qual rule)) []
 
