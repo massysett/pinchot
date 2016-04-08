@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- | Creating Earley parsers.
 
@@ -139,11 +140,18 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = recursiveDo binds final
 
 -- | Creates a record data type that holds a value of type
 --
--- @'Text.Earley.Prod' r 'String' t a@
+-- @'Text.Earley.Prod' r 'String' (t, a) (p t a)@
 --
--- for every rule created in the 'Pinchot'.  @r@ is left
--- universally quantified, @t@ is the token type (typically 'Char')
--- and @a@ is the type of the rule.
+-- where
+--
+-- * @r@ is left universally quantified
+--
+-- * @t@ is the token type (often 'Char')
+--
+-- * @a@ is any additional information about each token (often
+-- 'Pinchot.Loc')
+--
+-- * @p@ is the type of the particular production
 --
 -- This always creates a single product type whose name is
 -- @Productions@; currently the name cannot be configured.
@@ -159,8 +167,7 @@ allRulesRecord
   -- in the 'Seq', as well as for every ancestor of these 'Rule's.
   -> T.DecsQ
   -- ^ When spliced, this will create a single declaration that is a
-  -- record with the name @Productions@.  It will have one type variable,
-  -- @r@.  Each record in the declaration will have a name like so:
+  -- record with the name @Productions@.
   --
   -- @a'NAME@
   --
@@ -208,9 +215,12 @@ earleyProduct
 
   -> T.ExpQ
   -- ^ When spliced, 'earleyProduct' creates an expression whose
-  -- type is @'Text.Earley.Grammar' r (Productions r)@, where
+  -- type is @'Text.Earley.Grammar' r (Productions r t a)@, where
   -- @Productions@ is
-  -- the type created by 'allRulesRecord'.
+  -- the type created by 'allRulesRecord'; @r@ is left universally
+  -- quantified; @t@ is the token type (often 'Char'), and @a@ is
+  -- any additional information about each token (often
+  -- 'Pinchot.Loc').
 earleyProduct pfxRule pfxRec ruleSeq = do
   let binds = concatMap (ruleToParser pfxRule)
         . toList . families $ ruleSeq

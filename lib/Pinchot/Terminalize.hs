@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Pinchot.Terminalize where
 

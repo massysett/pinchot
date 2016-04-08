@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Emulating recursive do notation, as TH does not support it.

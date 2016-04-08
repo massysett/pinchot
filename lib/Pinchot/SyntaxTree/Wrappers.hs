@@ -14,9 +14,10 @@ import Pinchot.Types
 -- # Wrapped
 
 -- | Creates a 'Lens.Wrapped' instance for each 'Rule' and its
--- ancestors, if there is an instance.  Only 'Terminal, 'Terminals',
--- 'Wrap', 'Opt', 'Plus'
--- 'Star' get instances of 'Wrapped'.
+-- ancestors, if there is an instance.
+-- Only 'Pinchot.terminal', 'Pinchot.wrap',
+-- 'Pinchot.opt', 'Pinchot.star', and 'Pinchot.plus'
+-- get instances of 'Wrapped'.
 --
 -- This must be
 -- spliced in the same module in which the syntax tree types are
@@ -35,7 +36,8 @@ wrappedInstances
   . families
 
 -- | Creates a 'Lens.Wrapped' instance for the 'Rule', if there is
--- one.  Only 'Terminal', 'Terminals', 'Wrap', 'Opt', 'Star', and 'Plus'
+-- one.  Only 'Pinchot.terminal', 'Pinchot.wrap',
+-- 'Pinchot.opt', 'Pinchot.star', and 'Pinchot.plus'
 -- get instances of 'Wrapped'.
 -- 'This must be spliced in the same module in which the
 -- syntax tree types are created.

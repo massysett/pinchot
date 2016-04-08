@@ -13,18 +13,17 @@ import Pinchot.Rules
 import Pinchot.Types
 import Pinchot.Intervals
 
--- | Creates optics declarations for a multiple 'Rule's, if optics can
+-- | Creates optics declarations for a 'Rule', if optics can
 -- be made for the 'Rule':
 --
--- * 'Terminal' gets a single 'Lens.Prism'
+-- * 'Pinchot.terminal' gets a single 'Lens.Prism'
 --
--- * 'NonTerminal' gets a 'Lens.Prism' for each constructor
+-- * 'Pinchot.nonTerminal' gets a 'Lens.Prism' for each constructor
 --
--- * 'Terminals' gets a single 'Lens.Prism'
+-- * 'Pinchot.record' gets a single 'Lens.Lens'
 --
--- * 'Record' gets a single 'Lens.Lens'
---
--- * 'Wrap', 'Opt', 'Star', and 'Plus' do not get optics.
+-- * 'Pinchot.wrap', 'Pinchot.opt', 'Pinchot.star',
+-- and 'Pinchot.plus' do not get optics.
 --
 -- Each rule in the sequence of 'Rule', as well as all ancestors of
 -- those 'Rule's, will be handled.

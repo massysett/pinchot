@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE OverloadedLists #-}
 module Pinchot.Rules where
 
@@ -43,6 +44,7 @@ terminal n i = rule n (Terminal i)
 
 nonTerminal
   :: RuleName
+  -- ^ Will be used for the name of the resulting type
   -> Seq (BranchName, Seq (Rule t))
   -- ^ Branches of the non-terminal production rule.  This 'Seq'
   -- must have at least one element; otherwise, an error will
@@ -64,6 +66,7 @@ nonTerminal n branches = case Lens.uncons branches of
 -- @PRODUCTION_NAME@ is the rule name for what is being produced.
 union
   :: RuleName
+  -- ^ Will be used for the name of the resulting type
   -> Seq (Rule t)
   -- ^ List of branches.  There must be at least one branch;
   -- otherwise a compile-time error will occur.
@@ -83,6 +86,8 @@ union n rs = nonTerminal n (fmap f rs)
 
 terminals
   :: RuleName
+  -- ^ Will be used for the name of the resulting type, and for the
+  -- name of the sole data constructor
   -> String
   -> Rule Char
 terminals n s = record n rules
@@ -95,6 +100,8 @@ terminals n s = record n rules
 -- | Creates a newtype wrapper.
 wrap
   :: RuleName
+  -- ^ Will be used for the name of the resulting data type, and for
+  -- the name of the sole data constructor
   -> Rule t
   -- ^ The resulting 'Rule' simply wraps this 'Rule'.
   -> Rule t
@@ -114,12 +121,12 @@ wrap n r = rule n (Wrap r)
 -- Currently there is no way to change the names of the record fields.
 record
   :: RuleName
-  -- ^ The name of this rule, which is used both as the type name and
+  -- ^ The name of this rule, which is used both as the type name
+  -- and for the name of the sole data constructor
 
   -> Seq (Rule t)
   -- ^ The right-hand side of this rule.  This sequence can be empty,
   -- which results in an epsilon production.
-  -- the name of the sole data constructor.
   -> Rule t
 record n rs = rule n (Record rs)
 

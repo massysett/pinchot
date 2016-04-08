@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK not-home #-}
 module Pinchot.Types where
 
 import Pinchot.Intervals
@@ -9,11 +10,6 @@ import qualified Language.Haskell.TH as T
 -- | Type synonym for the name of a production rule.  This will be the
 -- name of the type constructor for the corresponding type that will
 -- be created, so this must be a valid Haskell type constructor name.
---
--- If you are creating a 'terminal', 'option', 'list', 'list1', or
--- 'wrap', the 'RuleName' will also be used for the name of the single
--- data construtor.  If you are creating a 'nonTerminal', you will
--- specify the name of each data constructor with 'AlternativeName'.
 type RuleName = String
 
 -- | Type synonym the the name of an alternative in a 'nonTerminal'.
@@ -33,7 +29,7 @@ type BranchName = String
 --
 -- t is the type of rule (terminal, branch, etc.)
 
--- | A single production rule.  It may be a terminal or a non-terminal.
+-- | A single production rule.
 data Rule t = Rule
   { _ruleName :: RuleName
   , _ruleDescription :: Maybe String
@@ -123,15 +119,15 @@ recordFieldName
 recordFieldName idx par inn = "r'" ++ par ++ "'" ++ show idx ++ "'" ++ inn
 
 -- | Many functions take an argument that holds the name qualifier
--- for the module that contains the data types created by applying
--- 'ruleTreeToTypes' or 'allRulesToTypes' to the 'Pinchot.'
+-- for the module that contains the data types created by applying a
+-- function such as 'Pinchot.SyntaxTree.syntaxTrees' or
+-- 'Pinchot.Earley.earleyProduct'.
 --
--- You have to make sure that the data types you created with
--- 'ruleTreeToTypes', 'allRulesToTypes', or 'allRulesRecord' are in
--- scope.  The spliced Template Haskell code has to know where to
+-- You will have to make sure that these data types are in scope.
+-- The spliced Template Haskell code has to know where to
 -- look for these data types.  If you did an unqualified @import@ or
--- if the types are in the same module as is the splice of
--- 'earleyParser', just pass the empty string here.  If you did a
+-- if the types are in the same module as the function that takes a
+-- 'Qualifier' argument, just pass the empty string here.  If you did a
 -- qualified import, use the appropriate qualifier here.
 --
 -- For example, if you used @import qualified MyAst@, pass
@@ -140,8 +136,8 @@ recordFieldName idx par inn = "r'" ++ par ++ "'" ++ show idx ++ "'" ++ inn
 -- @\"MyLibrary.MyAst\"@ here.
 --
 -- I recommend that you always create a new module and that all you
--- do in that module is apply 'ruleTreeToTypes' or
--- 'allRulesToTypes', and that you then perform an @import
+-- do in that module is apply 'Pinchot.SyntaxTree.syntaxTrees' or
+-- 'Pinchot.Earley.earleyProduct', and that you then perform an @import
 -- qualified@ to bring those names into scope in the module in which
 -- you use a function that takes a 'Qualifier' argument.  This
 -- avoids unlikely, but possible, issues that could otherwise arise
