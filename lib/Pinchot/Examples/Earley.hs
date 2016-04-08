@@ -9,9 +9,9 @@ import qualified Pinchot.Examples.SyntaxTrees as SyntaxTrees
 import qualified Pinchot.Examples.AllRulesRecord as AllRulesRecord
 import Text.Earley
 
-addressGrammar :: Grammar r (Prod r String Char (SyntaxTrees.Address Char ()))
+addressGrammar :: Grammar r (Prod r String Char (SyntaxTrees.Address Char a))
 addressGrammar = $(earleyGrammarFromRule "SyntaxTrees" rAddress)
 
-addressAllProductions :: Grammar r (AllRulesRecord.Productions r Char ())
+addressAllProductions :: Grammar r (AllRulesRecord.Productions r Char a)
 addressAllProductions = $(earleyProduct "SyntaxTrees" "AllRulesRecord"
   [rAddress])

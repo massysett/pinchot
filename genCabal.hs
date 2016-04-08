@@ -24,13 +24,16 @@ templateHaskell :: Package
 templateHaskell = atleast "template-haskell" [2,10]
 
 earley :: Package
-earley = atleast "Earley" [0,10,1,0]
+earley = atleast "Earley" [0,11,0,1]
 
 prettyShow :: Package
 prettyShow = atleast "pretty-show" [1,6,9]
 
 lens :: Package
 lens = atleast "lens" [4,13]
+
+listlike :: Package
+listlike = atleast "ListLike" [4,2,1]
 
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
@@ -41,7 +44,7 @@ commonOptions =
 
 libraryDepends :: [Package]
 libraryDepends = [ base, containers, transformers, templateHaskell,
-  earley, lens ]
+  earley, lens, listlike ]
 
 props :: Properties
 props = blank

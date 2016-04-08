@@ -56,10 +56,12 @@ module Pinchot
   , line
   , col
   , pos
-  , Locator
+  , locations
+  , noLocations
   ) where
 
 import Pinchot.Earley
+import Pinchot.Locator
 import Pinchot.Intervals
 import Pinchot.NonEmpty
 import Pinchot.Rules

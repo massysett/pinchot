@@ -15,7 +15,6 @@ import Data.Sequence ((<|), viewl, ViewL(EmptyL, (:<)), Seq)
 import qualified Data.Sequence as Seq
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
-import Text.Earley (satisfy, symbol)
 import qualified Text.Earley
 
 -- | Creates a list of pairs.  Each list represents a statement in
@@ -32,8 +31,12 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   Terminal ivls -> [makeRule expression]
     where
-      expression = [| fmap (\c -> $constructor (c, ()))
-        (satisfy (inIntervals ivls)) |]
+      expression =
+        [| let f (c, a)
+                | inIntervals ivls c = Just
+                    ($(T.conE (quald prefix nm)) (c, a))
+                | otherwise = Nothing
+           in Text.Earley.terminal f |]
 
   NonTerminal b1 bs -> [makeRule expression]
     where
@@ -48,7 +51,8 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
         where
           start = [|pure Seq.empty|]
           addTerm acc x =
-            [| let f s a = (s, ()) <| a in liftA2 f (symbol x) $acc |]
+            [| let f s a = (s, ()) <| a
+               in liftA2 f (Text.Earley.token x) $acc |]
       topRule = makeRule (wrapper helper)
 
   Wrap (Rule innerNm _ _) -> [makeRule expression]

@@ -3,7 +3,6 @@ module Pinchot.Types where
 import Pinchot.Intervals
 
 import qualified Control.Lens as Lens
-import Control.Monad.Trans.State (State)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
 
@@ -182,6 +181,3 @@ col = Lens.lens _col (\r l -> r { _col = l })
 
 pos :: Lens.Lens' Loc Int
 pos = Lens.lens _pos (\r l -> r { _pos = l })
-
-type Locator = State Loc
-
