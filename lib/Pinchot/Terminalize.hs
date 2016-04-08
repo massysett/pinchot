@@ -183,17 +183,6 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
     ms <- traverse tzr . toList $ bs
     T.lamE [T.varP x] (T.caseE (T.varE x) (m1 : ms))
 
-  Terminals sq
-    | not . Seq.null $ sq -> do
-        x <- T.newName "x"
-        let pat = T.conP (quald qual nm) [T.varP x]
-        [| \ $(pat) -> case NonEmpty.seqToNonEmpty $(T.varE x) of
-                  Nothing -> error
-                    $ "terminals: is empty: " ++ $(Syntax.lift nm)
-                  Just ne -> ne
-          |]
-    | otherwise -> [| Seq.empty |]
-
   Wrap (Rule inner _ _) -> do
     x <- T.newName "x"
     let pat = T.conP (quald qual nm) [T.varP x]
@@ -318,7 +307,6 @@ atLeastOne (Rule _ _ ty) = case ty of
   NonTerminal b1 bs -> branchAtLeastOne b1 && all branchAtLeastOne bs
     where
       branchAtLeastOne (Branch _ rs) = any atLeastOne rs
-  Terminals sq -> not . Seq.null $ sq
   Wrap r -> atLeastOne r
   Record rs -> any atLeastOne rs
   Opt _ -> False

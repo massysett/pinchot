@@ -45,16 +45,6 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
           addBranch tree branch =
             [| $tree <|> $(branchToParser prefix branch) |]
 
-  Terminals sq -> [nestRule, topRule]
-    where
-      nestRule = (helper, [| Text.Earley.rule $(foldl addTerm start sq) |])
-        where
-          start = [|pure Seq.empty|]
-          addTerm acc x =
-            [| let f s a = (s, ()) <| a
-               in liftA2 f (Text.Earley.token x) $acc |]
-      topRule = makeRule (wrapper helper)
-
   Wrap (Rule innerNm _ _) -> [makeRule expression]
     where
       expression = [|fmap $constructor $(T.varE (localRuleName innerNm)) |]
@@ -191,7 +181,7 @@ allRulesRecord prefix termName ruleSeq
           where
             ty = [t| Text.Earley.Prod $(T.varT (T.mkName "r"))
                       String
-                      $(T.varT (T.mkName "t"))
+                      ( $(T.varT (T.mkName "t")), $(T.varT (T.mkName "a")))
                       ( $(T.conT (T.mkName nameWithPrefix))
                             $(T.varT (T.mkName "t"))
                             $(T.varT (T.mkName "a"))) |]

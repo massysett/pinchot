@@ -75,7 +75,6 @@ branches
 data RuleType t
   = Terminal (Intervals t)
   | NonTerminal (Branch t) (Seq (Branch t))
-  | Terminals (Seq t)
   | Wrap (Rule t)
   | Record (Seq (Rule t))
   | Opt (Rule t)
@@ -90,10 +89,6 @@ _Terminal = Lens.prism' (\i -> Terminal i)
 _NonTerminal :: Lens.Prism' (RuleType t) (Branch t, Seq (Branch t))
 _NonTerminal = Lens.prism' (\(b, bs) -> NonTerminal b bs)
   (\r -> case r of { NonTerminal b bs -> Just (b, bs); _ -> Nothing })
-
-_Terminals :: Lens.Prism' (RuleType t) (Seq t)
-_Terminals = Lens.prism' (\ts -> Terminals ts)
-  (\r -> case r of { Terminals ts -> Just ts; _ -> Nothing })
 
 _Wrap :: Lens.Prism' (RuleType t) (Rule t)
 _Wrap = Lens.prism' (\r -> Wrap r)

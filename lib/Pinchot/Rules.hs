@@ -74,12 +74,23 @@ union n rs = nonTerminal n (fmap f rs)
       = (n ++ '\'' : branchName, Seq.singleton rule)
 
 -- | Creates a production for a sequence of terminals.  Useful for
--- parsing specific words.
+-- parsing specific words.  Ultimately this is simply a function
+-- that creates a 'Rule' using the 'record' function.
+--
+-- In @terminals n s@, For each 'Char' in the 'String', a 'Rule' is
+-- created whose 'RuleName' is @n@ followed by an apostrophe
+-- followed by the index of the position of the 'Char'.
+
 terminals
   :: RuleName
-  -> Seq t
-  -> Rule t
-terminals n s = rule n (Terminals s)
+  -> String
+  -> Rule Char
+terminals n s = record n rules
+  where
+    rules = Seq.fromList . zipWith mkRule [(0 :: Int) ..] $ s
+    mkRule idx char = terminal nm (solo char)
+      where
+        nm = n ++ ('\'' : show idx)
 
 -- | Creates a newtype wrapper.
 wrap
@@ -153,7 +164,6 @@ getAncestors r@(Rule name _ ty) = do
           as1 <- branchAncestors b1
           ass <- fmap join . traverse branchAncestors $ bs
           return $ r <| as1 <> ass
-        Terminals _ -> return (Seq.singleton r)
         Wrap c -> do
           cs <- getAncestors c
           return $ r <| cs

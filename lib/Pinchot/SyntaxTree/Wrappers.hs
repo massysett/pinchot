@@ -45,7 +45,6 @@ singleWrappedInstance
   -> Maybe (T.Q T.Dec)
 singleWrappedInstance (Rule nm _ ty) = case ty of
   Terminal _ -> Just $ wrappedTerminal nm
-  Terminals _ -> Just $ wrappedTerminals nm
   Wrap (Rule inner _ _) -> Just $ wrappedWrap inner nm
   Opt (Rule inner _ _) -> Just $ wrappedOpt inner nm
   Star (Rule inner _ _) -> Just $ wrappedStar inner nm

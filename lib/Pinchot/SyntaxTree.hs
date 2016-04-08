@@ -58,12 +58,6 @@ ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
     where
       cons = branchConstructor b1 : toList (fmap branchConstructor bs)
 
-  Terminals _ -> T.newtypeD (T.cxt []) name [charType, anyType] cons derives
-    where
-      cons = T.normalC name
-        [T.strictType T.notStrict
-          [t| Seq ( ( $(charTypeVar), $(anyTypeVar))) |] ]
-
   Wrap (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where

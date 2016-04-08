@@ -66,7 +66,6 @@ ruleToOptics
 ruleToOptics qual termName (Rule nm _ ty) = case ty of
   Terminal ivls -> terminalToOptics qual termName nm ivls
   NonTerminal b1 bs -> sequence $ nonTerminalToOptics qual nm b1 bs
-  Terminals sq -> terminalsToOptics qual termName nm sq
   Record sq -> sequence $ recordsToOptics qual nm sq
   _ -> return []
   
@@ -198,40 +197,6 @@ nonTerminalToOptics qual nm b1 bsSeq
                             bodyBlank = T.normalB
                               $ T.conE ('Left)
                               `T.appE` T.varE (T.mkName "_z")
-
--- | Creates a prism for a 'Terminals'.
-terminalsToOptics
-  :: Syntax.Lift t
-  => Qualifier
-  -- ^ Qualifier for module containing the data type that will get
-  -- optics
-  -> T.Name
-  -- ^ Terminal type name
-  -> String
-  -- ^ Rule name
-  -> Seq t
-  -> T.Q [T.Dec]
-terminalsToOptics qual termName nm sq = do
-  e1 <- T.sigD (T.mkName ('_':nm)) (T.forallT
-        [ T.PlainTV (T.mkName "a")] (return [])
-    [t| Lens.Prism'
-          (Seq ( $(T.conT termName), $(anyType) ))
-          ($(T.conT (quald qual nm)) $(T.conT termName) $(anyType)) |])
-  e2 <- T.valD prismName (T.normalB expn) []
-  return [e1, e2]
-  where
-    charType = T.varT (T.mkName "t")
-    anyType = T.varT (T.mkName "a")
-    prismName = T.varP (T.mkName ('_' : nm))
-    fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
-    fetchName = T.varE (T.mkName "_x")
-    ctor = T.conE (quald qual nm)
-    expn = [| let fetch = coerce
-                  store _term
-                    | $(liftSeq sq) == fmap fst _term = Just ($ctor _term)
-                    | otherwise = Nothing
-              in Lens.prism' fetch store
-           |]
 
 recordsToOptics
   :: Qualifier
