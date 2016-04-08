@@ -47,6 +47,10 @@ module Pinchot
   , earleyGrammarFromRule
   , earleyProduct
 
+  -- * Terminalizers
+  , terminalizeRuleExp
+  , terminalizers
+
   -- * Locations
   , Loc(..)
   , line
@@ -62,4 +66,5 @@ import Pinchot.Rules
 import Pinchot.SyntaxTree
 import Pinchot.SyntaxTree.Optics
 import Pinchot.SyntaxTree.Wrappers
+import Pinchot.Terminalize
 import Pinchot.Types

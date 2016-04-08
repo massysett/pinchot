@@ -2,7 +2,6 @@
 module Pinchot.Terminalize where
 
 import Control.Monad (join)
-import Data.Coerce (coerce)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Foldable (foldlM, toList)
@@ -11,7 +10,7 @@ import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 
-import Pinchot.NonEmpty (NonEmpty)
+import Pinchot.NonEmpty (NonEmpty(NonEmpty))
 import qualified Pinchot.NonEmpty as NonEmpty
 import Pinchot.Types
 import Pinchot.Rules
@@ -33,8 +32,7 @@ import Pinchot.Rules
 -- returned for productions that must always contain at least one
 -- terminal symbol; for those that can be empty, 'Seq' is returned.
 terminalizers
-  :: Foldable c
-  => Qualifier
+  :: Qualifier
   -- ^ Qualifier for the module containing the data types created
   -- from the 'Rule's
  
@@ -42,13 +40,14 @@ terminalizers
   -- ^ Name of terminal type.  Typically you will get this through
   -- the Template Haskell quoting mechanism, such as @''Char@.
 
-  -> c (Rule t)
+  -> Seq (Rule t)
   -> T.Q [T.Dec]
 
 terminalizers qual termType
   = fmap concat
   . traverse (terminalizer qual termType)
   . toList
+  . families
 
 -- | For the given rule, creates declarations that reduce the rule
 -- to terminal symbols.  No ancestors are handled.  Each rule gets a
@@ -82,9 +81,15 @@ terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
   where
     declName = "t'" ++ nm
     anyType = T.varT (T.mkName "a")
-    sig = T.sigD (T.mkName declName)
-      [t| $(T.varT (quald qual nm)) $(anyType)
-          -> Seq ($(T.varT termType), $anyType) |]
+    sig
+      | atLeastOne rule = T.sigD (T.mkName declName)
+          . T.forallT [(T.PlainTV (T.mkName "a"))] (return [])
+          $ [t| $(T.conT (quald qual nm)) $(anyType)
+            -> NonEmpty ($(T.conT termType), $(anyType)) |]
+      | otherwise = T.sigD (T.mkName declName)
+          . T.forallT [(T.PlainTV (T.mkName "a"))] (return [])
+          $ [t| $(T.conT (quald qual nm)) $(anyType)
+              -> Seq ($(T.conT termType), $(anyType)) |]
     expn = T.valD (T.varP $ T.mkName declName)
       (T.normalB (terminalizeRuleExp qual rule)) []
 
@@ -159,7 +164,10 @@ terminalizeSingleRule
   -> Rule t
   -> T.Q T.Exp
 terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
-  Terminal _ -> [| NonEmpty.singleton . coerce |]
+  Terminal _ -> do
+    x <- T.newName "x"
+    let pat = T.conP (quald qual nm) [T.varP x]
+    [| \ $(pat) -> NonEmpty.singleton $(T.varE x) |]
 
   NonTerminal b1 bs -> do
     x <- T.newName "x"
@@ -173,16 +181,20 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
     T.lamE [T.varP x] (T.caseE (T.varE x) (m1 : ms))
 
   Terminals sq
-    | not . Seq.null $ sq ->
-        [| \s -> case NonEmpty.seqToNonEmpty . coerce $ s of
+    | not . Seq.null $ sq -> do
+        x <- T.newName "x"
+        let pat = T.conP (quald qual nm) [T.varP x]
+        [| \ $(pat) -> case NonEmpty.seqToNonEmpty $(T.varE x) of
                   Nothing -> error
                     $ "terminals: is empty: " ++ $(Syntax.lift nm)
                   Just ne -> ne
-        |]
-    | otherwise -> [| coerce |]
+          |]
+    | otherwise -> [| Seq.empty |]
 
-  Wrap (Rule inner _ _) ->
-    [| $(T.varE (lookupName lkp inner)) . coerce |]
+  Wrap (Rule inner _ _) -> do
+    x <- T.newName "x"
+    let pat = T.conP (quald qual nm) [T.varP x]
+    [| \ $(pat) -> $(T.varE (lookupName lkp inner)) $(T.varE x) |]
 
   Record rs -> do
     (pat, expn) <- fTzr qual lkp nm rs
@@ -191,26 +203,42 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
       fTzr | atLeastOne rule = terminalizeProductAtLeastOne
            | otherwise = terminalizeProductAllowsZero
 
-  Opt (Rule inner _ _) ->
-    [| maybe Seq.empty $(T.varE (lookupName lkp inner)) . coerce |]
+  Opt r@(Rule inner _ _) -> do
+    x <- T.newName "x"
+    let pat = T.conP (quald qual nm) [T.varP x]
+    [| \ $(pat) -> maybe Seq.empty
+          $(convert (T.varE (lookupName lkp inner))) $(T.varE x) |]
+    where
+      convert expn | atLeastOne r = [| NonEmpty.flatten . $(expn) |]
+                   | otherwise = expn
 
-  Star (Rule inner _ _) ->
-    [| join . fmap $(T.varE (lookupName lkp inner)) . coerce |]
+  Star r@(Rule inner _ _) -> do
+    x <- T.newName "x"
+    let pat = T.conP (quald qual nm) [T.varP x]
+        convert e | atLeastOne r = [| NonEmpty.flatten . $(e) |]
+                  | otherwise = e
+    [| \ $(pat) -> join . fmap $(convert (T.varE (lookupName lkp inner)))
+          $ $(T.varE x) |]
 
   Plus r@(Rule inner _ _)
-    | atLeastOne r ->
-      [| let getTermNonEmpty = $(T.varE (lookupName lkp inner))
-             getTerms (e1, es) = join . fmap getTermNonEmpty
-              $ NonEmpty.NonEmpty e1 es
-         in getTerms . coerce
-      |]
+    | atLeastOne r -> do
+        x <- T.newName "x"
+        let pat = T.conP (quald qual nm) [T.varP x]
+        [| \ $(pat) ->
+            let getTermNonEmpty = $(T.varE (lookupName lkp inner))
+                getTerms (NonEmpty e1 es) = join . fmap getTermNonEmpty
+                  $ NonEmpty.NonEmpty e1 es
+           in getTerms $(T.varE x)
+          |]
 
-    | otherwise ->
-      [| let getTermSeq = $(T.varE (lookupName lkp inner))
-             getTerms (e1, es) = getTermSeq e1
-              `mappend` (join (fmap getTermSeq es))
-         in getTerms . coerce
-      |]
+    | otherwise -> do
+        x <- T.newName "x"
+        let pat = T.conP (quald qual nm) [T.varP x]
+        [| let getTermSeq = $(T.varE (lookupName lkp inner))
+               getTerms (NonEmpty e1 es) = getTermSeq e1
+                `mappend` (join (fmap getTermSeq es))
+           in getTerms $(T.varE x)
+          |]
 
 terminalizeProductAllowsZero
   :: Qualifier
@@ -222,11 +250,15 @@ terminalizeProductAllowsZero
 terminalizeProductAllowsZero qual lkp name bs = do
   pairs <- fmap toList . traverse (terminalizeProductRule lkp) $ bs
   let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
-      body = case fmap (snd . snd) pairs of
+      body = case pairs of
         [] -> [| Seq.empty |]
-        x:xs -> foldl f x xs
+        x:xs -> foldl f start xs
           where
-            f acc expn = [| $(acc) `mappend` $(expn) |]
+            f acc trip = [| $(acc) `mappend` $(procTrip trip) |]
+            start = procTrip x
+            procTrip (rule, (_, expn))
+              | atLeastOne rule = [| NonEmpty.flatten $(expn) |]
+              | otherwise = expn
   return (pat, body)
 
 terminalizeProductAtLeastOne
@@ -242,7 +274,7 @@ terminalizeProductAtLeastOne qual lkp name bs = do
       body = [| ( $(leadSeq) `NonEmpty.prependSeq` $(firstNonEmpty))
                 `NonEmpty.appendSeq` $(trailSeq) |]
         where
-          (leadRules, lastRules) = span (atLeastOne . fst) pairs
+          (leadRules, lastRules) = span (not . atLeastOne . fst) pairs
           (firstNonEmptyRule, trailRules) = case lastRules of
             [] -> error $ "terminalizeProductAtLeastOne: failure 1: " ++ name
             x:xs -> (x, xs)
