@@ -1,6 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedLists #-}
 
+-- | This module shows how to generate Earley grammars for your
+-- context-free grammar.  You will want to look at the source code.
 module Pinchot.Examples.Earley where
 
 import Pinchot

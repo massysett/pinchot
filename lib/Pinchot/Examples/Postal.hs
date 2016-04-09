@@ -1,5 +1,14 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+
+-- | This module contains a context-free grammar for U.S. postal
+-- addresses.  It would never hold up to real-world use but it gives
+-- you a good idea of how to write grammars in Pinchot.
+--
+-- The grammar is ambiguous.
+--
+-- There are no signatures; the type of every declaration in the
+-- module is 'Rule' 'Char'.
 module Pinchot.Examples.Postal where
 
 import Pinchot
@@ -20,21 +29,34 @@ rEast = terminal "East" (solo 'E')
 
 rWest = terminal "West" (solo 'W')
 
-rDirection = union "Direction" [rNorth, rSouth, rEast, rWest]
+rNE = terminals "NE" "NE"
 
-rStreet = terminals "Street" ['S', 't']
+rNW = terminals "NW" "NW"
 
-rAvenue = terminals "Avenue" ['A', 'v', 'e']
+rSW = terminals "SW" "SW"
 
-rWay = terminals "Way" ['W', 'a', 'y']
+rSE = terminals "SE" "SE"
 
-rBoulevard = terminals "Boulevard" ['B', 'l', 'v', 'd']
+rDirection = union "Direction"
+  [rNorth, rSouth, rEast, rWest, rNE, rNW, rSE, rSW]
+
+rStreet = terminals "Street" "St"
+
+rAvenue = terminals "Avenue" "Ave"
+
+rWay = terminals "Way" "Way"
+
+rBoulevard = terminals "Boulevard" "Blvd"
 
 rSuffix = union "Suffix" [rStreet, rAvenue, rWay, rBoulevard]
 
 rSpace = terminal "Space" (solo ' ')
 
 rComma = terminal "Comma" (solo ',')
+
+rNewline = terminal "Newline" (solo '\n')
+
+rSeparator = union "Separator" [rComma, rNewline]
 
 rLetters = nonTerminal "Letters"
   [ ("NoLetter", [])
@@ -58,16 +80,24 @@ rCity = wrap "City" rWords
 
 rState = wrap "State" rWords
 
-rZipCode = wrap "ZipCode" rWords
+rZipCode = record "ZipCode" [rDigit, rDigit, rDigit, rDigit, rDigit]
 
-rDirectionSpace = record "DirectionSpace" [rDirection, rSpace]
+rSpaceDirection = record "SpaceDirection" [rSpace, rDirection]
 
 rSpaceSuffix = record "SpaceSuffix" [rSpace, rSuffix]
 
-rOptDirection = opt rDirection
+rOptDirection = opt rSpaceDirection
 
 rOptSuffix = opt rSpaceSuffix
 
-rAddress = record "Address" [rNumber, rSpace, rOptDirection, rStreetName,
-  rOptSuffix, rComma, rSpace, rCity, rSpace, rState, rSpace,
-  rZipCode]
+rOptNewline = opt rNewline
+
+rNameLine = record "NameLine" [rWords, rSeparator]
+
+rStreetLine = record "StreetLine" [rNumber, rOptDirection,
+  rStreetName, rOptSuffix, rSeparator]
+
+rCityLine = record "CityLine" [rCity, rComma, rSpace, rState,
+  rSpace, rZipCode, rOptNewline]
+
+rAddress = record "Address" [rNameLine, rStreetLine, rCityLine]

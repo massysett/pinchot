@@ -1,5 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedLists #-}
+
+-- | This module shows how to use Template Haskell to generate
+-- functions that will reduce any production to the terminal tokens
+-- that were used to create it.
 module Pinchot.Examples.Terminalize where
 
 import Pinchot
