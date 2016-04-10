@@ -17,13 +17,15 @@ import Pinchot.Types
 -- ancestors, if there is an instance.
 -- Only 'Pinchot.terminal', 'Pinchot.wrap',
 -- 'Pinchot.opt', 'Pinchot.star', and 'Pinchot.plus'
--- get instances of 'Wrapped'.
+-- get instances of 'Lens.Wrapped'.
 --
 -- This must be
 -- spliced in the same module in which the syntax tree types are
 -- created; this way, no orphans are created.  Since ancestors are
 -- included, you can get the entire tree of types that you need by
 -- applying this function to a single start symbol.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
 
 wrappedInstances
   :: Seq (Rule t)

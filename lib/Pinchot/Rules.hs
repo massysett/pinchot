@@ -21,7 +21,8 @@ import Pinchot.Intervals
 label :: Rule t -> String -> Rule t
 label (Rule n _ t) s = Rule n (Just s) t
 
--- | Infix synonym for 'label'.
+-- | Infix synonym for 'label'.  Example:
+-- 'Pinchot.Examples.Postal.rDigit'.
 (<?>) :: Rule t -> String -> Rule t
 (<?>) = label
 infixr 0 <?>
@@ -30,7 +31,8 @@ infixr 0 <?>
 rule :: RuleName -> RuleType t -> Rule t
 rule n = Rule n Nothing
 
--- | Creates a terminal production rule.
+-- | Creates a terminal production rule.  Example:
+-- 'Pinchot.Examples.Postal.rLetter'.
 terminal
   :: RuleName
   -> Intervals t
@@ -40,7 +42,8 @@ terminal n i = rule n (Terminal i)
 
 -- | Creates a non-terminal production rule.  This is the most
 -- flexible way to create non-terminals.  You can even create a
--- non-terminal that depends on itself.
+-- non-terminal that depends on itself.  Example:
+-- 'Pinchot.Examples.Postal.rLetters'.
 
 nonTerminal
   :: RuleName
@@ -64,6 +67,8 @@ nonTerminal n branches = case Lens.uncons branches of
 --
 -- where @RULE_NAME@ is the name of the rule itself, and
 -- @PRODUCTION_NAME@ is the rule name for what is being produced.
+--
+-- Example: 'Pinchot.Examples.Postal.rDirection'.
 union
   :: RuleName
   -- ^ Will be used for the name of the resulting type
@@ -83,6 +88,8 @@ union n rs = nonTerminal n (fmap f rs)
 -- In @terminals n s@, For each 'Char' in the 'String', a 'Rule' is
 -- created whose 'RuleName' is @n@ followed by an apostrophe
 -- followed by the index of the position of the 'Char'.
+--
+-- Examples: 'Pinchot.Examples.Postal.rBoulevard'.
 
 terminals
   :: RuleName
@@ -97,7 +104,8 @@ terminals n s = record n rules
       where
         nm = n ++ ('\'' : show idx)
 
--- | Creates a newtype wrapper.
+-- | Creates a newtype wrapper.  Example:
+-- 'Pinchot.Examples.Postal.rCity'.
 wrap
   :: RuleName
   -- ^ Will be used for the name of the resulting data type, and for
@@ -119,6 +127,8 @@ wrap n r = rule n (Wrap r)
 -- field itself.
 --
 -- Currently there is no way to change the names of the record fields.
+--
+-- Example: 'Pinchot.Examples.Postal.rAddress'.
 record
   :: RuleName
   -- ^ The name of this rule, which is used both as the type name
@@ -133,6 +143,8 @@ record n rs = rule n (Record rs)
 -- | Creates a rule for a production that optionally produces another
 -- rule.  The name for the created 'Rule' is the name of the 'Rule' to
 -- which this function is applied, with @'Opt@ appended to the end.
+--
+-- Example: 'Pinchot.Examples.Postal.rOptNewline'.
 opt
   :: Rule t
   -> Rule t
@@ -143,6 +155,8 @@ opt r@(Rule innerNm _ _) = rule n (Opt r)
 -- | Creates a rule for the production of a sequence of other rules.
 -- The name for the created 'Rule' is the name of the 'Rule' to which
 -- this function is applied, with @'Star@ appended.
+--
+-- Example: 'Pinchot.Examples.Postal.rPreSpacedWord'.
 star
   :: Rule t
   -> Rule t
@@ -151,6 +165,8 @@ star r@(Rule innerNm _ _) = rule (innerNm ++ "'Star") (Star r)
 -- | Creates a rule for a production that appears at least once.  The
 -- name for the created 'Rule' is the name of the 'Rule' to which this
 -- function is applied, with @'Plus@ appended.
+--
+-- Example: 'Pinchot.Examples.Postal.rDigits'.
 plus
   :: Rule t
   -> Rule t

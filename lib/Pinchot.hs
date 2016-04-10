@@ -102,6 +102,9 @@ module Pinchot
   , pos
   , locations
   , noLocations
+
+  -- * Running parsers with locations
+  , locatedFullParses
   ) where
 
 import Pinchot.Earley

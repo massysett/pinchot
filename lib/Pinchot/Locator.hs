@@ -1,12 +1,15 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 module Pinchot.Locator where
 
-import qualified Data.ListLike as ListLike
 import Pinchot.Types
+
+import qualified Data.ListLike as ListLike
 import Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as Seq
+import qualified Text.Earley as Earley
 
 -- | Advances the location for 'Char' values.  Tabs advance to the
 -- next eight-column tab stop; newlines advance to the next line and
@@ -20,7 +23,7 @@ advanceChar c (Loc !lin !col !pos)
 
 -- | Takes any ListLike value based on 'Char' (@Seq@, @Text@,
 -- @String@, etc.) and creates a 'Seq' which pairs each 'Char' with
--- its location.
+-- its location.  Example: 'locatedFullParses'.
 locations
   :: ListLike.FoldableLL full Char
   => full
@@ -37,3 +40,20 @@ noLocations
 noLocations = ListLike.foldl' f Seq.empty
   where
     f !sq c = sq |> (c, ())
+
+-- | Obtains all full Earley parses from a given input string, after
+-- assigning a location to every 'Char'.  Example:
+-- 'Pinchot.Examples.Newman.address'.
+locatedFullParses
+  :: ListLike.FoldableLL full Char
+  => (forall r. Earley.Grammar r (Earley.Prod r String (Char, Loc) (p Char Loc)))
+  -- ^ Earley grammar with production that you want to parse.
+  -> full
+  -- ^ Source text, e.g. 'String', 'Data.Text', etc.
+  -> ([p Char Loc], Earley.Report String (Seq (Char, Loc)))
+  -- ^ A list of successful parses that when to the end of the
+  -- source string, along with the Earley report showing possible
+  -- errors.
+locatedFullParses g
+  = Earley.fullParses (Earley.parser g)
+  . locations

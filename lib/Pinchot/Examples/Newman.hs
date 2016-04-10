@@ -100,15 +100,6 @@ showAddress a = name ++ street ++ city
           . _r'Address'2'CityLine
           $ a
 
--- | Parses an address from a string and returns the successful
--- parses and the 'Earley.Report'.
-parseAddress
-  :: String
-  -> ([Address Char Loc], Earley.Report String (Seq (Char, Loc)))
-parseAddress
-  = Earley.fullParses (Earley.parser addressGrammar)
-  . locations
-
 -- | Formats successful 'Address' parses and the 'Earley.Report' for
 -- nice on-screen display.
 showParseResult
@@ -126,7 +117,7 @@ showParseResult (addresses, report) = addresses' ++ "\n" ++ report'
 -- | Parse an address and print the resulting report.  Good for use
 -- in GHCi.
 address :: String -> IO ()
-address = putStrLn . showParseResult . parseAddress
+address = putStrLn . showParseResult . locatedFullParses addressGrammar
 
 -- | Read an address from a file and print the resulting report.
 -- Good for use in GHCi.
@@ -136,4 +127,4 @@ addressFromFile
   -> IO ()
 addressFromFile fn = do
   str <- readFile fn
-  putStrLn . showParseResult . parseAddress $ str
+  putStrLn . showParseResult . locatedFullParses addressGrammar $ str

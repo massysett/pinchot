@@ -15,7 +15,8 @@ import Pinchot.Types
 -- | Makes the top-level declarations for each given 'Rule' and for
 -- all ancestors of the given 'Rule's.  Since ancestors are
 -- included, you can get the entire tree of types that you need by
--- applying this function to a single start symbol.
+-- applying this function to a single start symbol.  Example:
+-- "Pinchot.Examples.SyntaxTrees".
 syntaxTrees
   :: T.Name
   -- ^ Name of terminal type.  Typically you will get this from the

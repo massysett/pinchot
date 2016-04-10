@@ -120,11 +120,14 @@ branchToParser prefix (Branch name rules) = case viewl rules of
 
 -- | Creates an expression that has type
 --
--- 'Text.Earley.Grammar' r (Prod r String c (p ()))
+-- 'Text.Earley.Grammar' r (Prod r String (c, a) (p c a))
 --
 -- where @r@ is left universally quantified; @c@ is the terminal
--- type (often 'Char'), and @p@ is the data type corresponding to
+-- type (often 'Char'), @a@ is arbitrary metadata about each token
+-- (often 'Loc') and @p@ is the data type corresponding to
 -- the given 'Rule'.
+--
+-- Example:  'Pinchot.Examples.Earley.addressGrammar'.
 earleyGrammarFromRule
   :: Syntax.Lift t
   => Qualifier
@@ -155,6 +158,8 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = recursiveDo binds final
 --
 -- This always creates a single product type whose name is
 -- @Productions@; currently the name cannot be configured.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
 allRulesRecord
   :: Qualifier
   -- ^ Qualifier for data types corresponding to those created from
@@ -198,6 +203,7 @@ allRulesRecord prefix termName ruleSeq
 
 -- | Creates a 'Text.Earley.Grammar' that contains a
 -- 'Text.Earley.Prod' for every given 'Rule' and its ancestors.
+-- Example: 'Pinchot.Examples.Earley.addressAllProductions'.
 earleyProduct
   :: Syntax.Lift t
 

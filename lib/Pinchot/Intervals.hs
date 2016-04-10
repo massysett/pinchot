@@ -46,7 +46,7 @@ instance Monoid (Intervals a) where
 
 -- | Include a range of symbols in the 'Intervals'.  For instance, to
 -- include the characters @'a'@, @'b'@, and @'c'@, use @include 'a'
--- 'c'@.
+-- 'c'@.  Example: 'Pinchot.Examples.Postal.rLetter'.
 include :: a -> a -> Intervals a
 include l h = Intervals [(l, h)] []
 
@@ -56,7 +56,8 @@ include l h = Intervals [(l, h)] []
 exclude :: a -> a -> Intervals a
 exclude l h = Intervals [] [(l, h)]
 
--- | Include a single symbol.
+-- | Include a single symbol.  Example:
+-- 'Pinchot.Examples.Postal.rNorth'.
 solo :: a -> Intervals a
 solo x = Intervals [(x, x)] []
 

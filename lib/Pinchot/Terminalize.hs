@@ -29,9 +29,12 @@ import Pinchot.Rules
 -- Production a -> NonEmpty (t, a)
 --
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- 'Rule', @t@ is the terminal token type (often 'Char'), and @a@ is
+-- arbitrary metadata about each token (often 'Loc').  'NonEmpty' is
 -- returned for productions that must always contain at least one
 -- terminal symbol; for those that can be empty, 'Seq' is returned.
+--
+-- Example: "Pinchot.Examples.Terminalize".
 terminalizers
   :: Qualifier
   -- ^ Qualifier for the module containing the data types created
@@ -63,9 +66,11 @@ terminalizers qual termType
 -- Production a -> NonEmpty (t, a)
 --
 -- where @Production@ is the production corresponding to the given
--- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
+-- 'Rule', @t@ is the terminal token type (often 'Char'), and @a@ is
+-- arbitrary metadata about each token (often 'Loc').  'NonEmpty' is
 -- returned for productions that must always contain at least one
 -- terminal symbol; for those that can be empty, 'Seq' is returned.
+
 terminalizer
   :: Qualifier
   -- ^ Qualifier for the module containing the data types created
@@ -110,6 +115,8 @@ terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
 -- 'Rule', and @t@ is the terminal token type.  'NonEmpty' is
 -- returned for productions that must always contain at least one
 -- terminal symbol; for those that can be empty, 'Seq' is returned.
+--
+-- Example:  'Pinchot.Examples.Terminalize.terminalizeAddress'.
 terminalizeRuleExp
   :: Qualifier
   -> Rule t

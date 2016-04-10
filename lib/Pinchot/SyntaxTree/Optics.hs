@@ -27,6 +27,8 @@ import Pinchot.Intervals
 --
 -- Each rule in the sequence of 'Rule', as well as all ancestors of
 -- those 'Rule's, will be handled.
+--
+-- Example: "Pinchot.Examples.RulesToOptics".
 rulesToOptics
   :: Syntax.Lift t
   => Qualifier
