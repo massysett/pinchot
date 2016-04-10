@@ -15,5 +15,14 @@
 --
 -- "Pinchot.Examples.RulesToOptics" shows how to generate lenses and
 -- isos, which are valuable for navigating and manipulating large trees.
+--
+-- Finally, "Pinchot.Examples.Newman" shows how to actually run the
+-- Earley parsers, find the locations of various productions, and
+-- show the results on-screen.  You can play with
+-- 'Pinchot.Examples.Newman.address' and
+-- 'Pinchot.Examples.Newman.addressFromFile' in GHCi.  Or, if you
+-- compile the Pinchot package using the @executables@ flag, you
+-- will get an executable named @newman@ that you can play with from
+-- the command line.
 
 module Pinchot.Examples where

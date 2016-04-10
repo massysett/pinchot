@@ -37,7 +37,7 @@ listlike = atleast "ListLike" [4,2,1]
 
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
-  [ otherExtensions ["TemplateHaskell", "TypeFamilies"]
+  [ otherExtensions ["TemplateHaskell"]
   , haskell2010
   , hsSourceDirs ["lib"]
   ]
@@ -60,12 +60,11 @@ props = blank
   , stability = "Experimental"
   , homepage = "http://www.github.com/massysett/pinchot"
   , bugReports = "http://www.github.com/massysett/pinchot/issues"
-  , synopsis = "Build parsers and ASTs for context-free grammars"
+  , synopsis = "Write grammars, not parsers"
   , extraSourceFiles = ["README"]
   , description =
     [ "Pinchot provides a simple language that you use to write a Haskell"
-    , "program that describes a context-free grammar.  When run, this program"
-    , "creates a value representing the grammar.  Using this value, you can"
+    , "value that describes a context-free grammar.  Using this value, you can"
     , "automatically generate data types corresponding to the grammar,"
     , "as well as an Earley parser to parse strings in that grammar."
     , ""

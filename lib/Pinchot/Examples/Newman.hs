@@ -1,3 +1,7 @@
+-- | This module provides a simple example of use of everything in
+-- Pinchot.  'address' parses a postal address from a string and
+-- prints a simple report showing some of the elements of the
+-- address and their locations.
 module Pinchot.Examples.Newman where
 
 import Pinchot
@@ -14,11 +18,14 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Text.Earley as Earley
 
+-- | Formats a 'Loc' for nice on-screen display.
 labelLoc :: Loc -> String
 labelLoc (Loc l c p)
   = "(line: " ++ show l ++ " col: " ++ show c ++ " pos: "
   ++ show p ++ ")"
 
+-- | Labels a single field, where the field may or may not appear in
+-- a parsed result.
 labelOpt :: String -> Seq (Char, Loc) -> String
 labelOpt l sq
   = l ++ ": " ++ show (toList . fmap fst $ sq)
@@ -28,6 +35,8 @@ labelOpt l sq
       Nothing -> "(no location)"
       Just ((_, loc), _) -> labelLoc loc
 
+-- | Labels a single field, where the field will always appear in a
+-- parsed result.
 labelNE :: String -> NonEmpty (Char, Loc) -> String
 labelNE l sq
   = l ++ ": " ++ show (toList . fmap fst $ sq)
@@ -35,6 +44,7 @@ labelNE l sq
   where
     loc = labelLoc . snd . _front $ sq
 
+-- | Formats a single 'Address' for nice on-screen display.
 showAddress :: Address Char Loc -> String
 showAddress a = name ++ street ++ city
   where
@@ -90,6 +100,8 @@ showAddress a = name ++ street ++ city
           . _r'Address'2'CityLine
           $ a
 
+-- | Parses an address from a string and returns the successful
+-- parses and the 'Earley.Report'.
 parseAddress
   :: String
   -> ([Address Char Loc], Earley.Report String (Seq (Char, Loc)))
@@ -97,6 +109,8 @@ parseAddress
   = Earley.fullParses (Earley.parser addressGrammar)
   . locations
 
+-- | Formats successful 'Address' parses and the 'Earley.Report' for
+-- nice on-screen display.
 showParseResult
   :: ([Address Char Loc], Earley.Report String (Seq (Char, Loc)))
   -> String
