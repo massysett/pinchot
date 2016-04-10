@@ -56,7 +56,9 @@ rComma = terminal "Comma" (solo ',')
 
 rNewline = terminal "Newline" (solo '\n')
 
-rSeparator = union "Separator" [rComma, rNewline]
+rCommaSpace = record "CommaSpace" [rComma, rSpace]
+
+rSeparator = union "Separator" [rCommaSpace, rNewline]
 
 rLetters = nonTerminal "Letters"
   [ ("NoLetter", [])
@@ -82,11 +84,11 @@ rState = wrap "State" rWords
 
 rZipCode = record "ZipCode" [rDigit, rDigit, rDigit, rDigit, rDigit]
 
-rSpaceDirection = record "SpaceDirection" [rSpace, rDirection]
+rDirectionSpace = record "DirectionSpace" [rDirection, rSpace]
 
 rSpaceSuffix = record "SpaceSuffix" [rSpace, rSuffix]
 
-rOptDirection = opt rSpaceDirection
+rOptDirection = opt rDirectionSpace
 
 rOptSuffix = opt rSpaceSuffix
 
@@ -94,7 +96,7 @@ rOptNewline = opt rNewline
 
 rNameLine = record "NameLine" [rWords, rSeparator]
 
-rStreetLine = record "StreetLine" [rNumber, rOptDirection,
+rStreetLine = record "StreetLine" [rNumber, rSpace, rOptDirection,
   rStreetName, rOptSuffix, rSeparator]
 
 rCityLine = record "CityLine" [rCity, rComma, rSpace, rState,

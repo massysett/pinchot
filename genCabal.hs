@@ -37,7 +37,7 @@ listlike = atleast "ListLike" [4,2,1]
 
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
-  [ otherExtensions ["TemplateHaskell"]
+  [ otherExtensions ["TemplateHaskell", "TypeFamilies"]
   , haskell2010
   , hsSourceDirs ["lib"]
   ]
@@ -88,44 +88,8 @@ main = defaultMain $ do
       : buildDepends libraryDepends
       : commonOptions
     , [ githubHead "massysett" "penny"
-      , executable "print-postal-grammar" $
-        [ mainIs "print-postal-grammar.hs"
-        , condBlock (flag buildExe)
-            (buildable True, ( [ otherModules libMods
-                               , hsSourceDirs ["exe"]
-                               , buildDepends libraryDepends
-                               ] ++ commonOptions
-                             )
-            )
-            [buildable False]
-        ]
-
-      , executable "postal-parser" $
-        [ mainIs "postal-parser.hs"
-        , condBlock (flag buildExe)
-            (buildable True, ( [ otherModules libMods
-                               , hsSourceDirs ["exe"]
-                               , buildDepends (prettyShow : libraryDepends)
-                               ] ++ commonOptions
-                             )
-            )
-            [buildable False]
-        ]
-
-      , executable "parrot" $
-        [ mainIs "parrot.hs"
-        , condBlock (flag buildExe)
-            (buildable True, ( [ otherModules libMods
-                               , hsSourceDirs ["exe"]
-                               , buildDepends libraryDepends
-                               ] ++ commonOptions
-                             )
-            )
-            [buildable False]
-        ]
-
-      , executable "parakeet" $
-        [ mainIs "parakeet.hs"
+      , executable "newman" $
+        [ mainIs "newman.hs"
         , condBlock (flag buildExe)
             (buildable True, ( [ otherModules libMods
                                , hsSourceDirs ["exe"]

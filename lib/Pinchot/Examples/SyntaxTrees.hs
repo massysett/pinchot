@@ -14,7 +14,10 @@
 module Pinchot.Examples.SyntaxTrees where
 
 import Pinchot
+import Pinchot.SyntaxTree.Wrappers
 import Pinchot.Examples.Postal
+
+import qualified Control.Lens as Lens
 
 -- This generates the data types corresponding to the 'rAddress'
 -- 'Rule', as well as all the ancestors of that 'Rule'.

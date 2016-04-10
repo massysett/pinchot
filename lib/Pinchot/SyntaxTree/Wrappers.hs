@@ -75,7 +75,7 @@ makeWrapped wrappedType nm = T.instanceD (return []) typ decs
             `T.appT` (T.varT (T.mkName "t"))
             `T.appT` (T.varT (T.mkName "a"))]
                       wrappedType)
-        wrapper = T.funD 'Lens._Wrapped
+        wrapper = T.funD 'Lens._Wrapped'
           [T.clause [] (T.normalB body) []]
           where
             body = (T.varE 'Lens.iso)
