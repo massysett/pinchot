@@ -10,12 +10,18 @@ import qualified Language.Haskell.TH as T
 -- | Type synonym for the name of a production rule.  This will be the
 -- name of the type constructor for the corresponding type that will
 -- be created, so this must be a valid Haskell type constructor name.
+-- Typically each context-free grammar that you write will have
+-- several production rules; you will want to make sure that every
+-- 'RuleName' that you create for a single context-free grammar is
+-- unique.  However, Pinchot currently does not check for
+-- uniqueness.  If you use names that are not unique, GHC will give
+-- an error message when you try to splice the resulting code, as
+-- the data types will not have unique names.
 type RuleName = String
 
 -- | Type synonym the the name of an alternative in a 'nonTerminal'.
--- This name must not conflict with any other data constructor, either
--- one specified as an 'AlternativeName' or one that was created using
--- 'terminal', 'option', 'list', or 'list1'.
+-- This name must not conflict with any other data constructor in
+-- your grammar.
 type BranchName = String
 
 -- Rule n d t, where
