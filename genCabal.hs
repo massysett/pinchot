@@ -6,7 +6,7 @@ module Main where
 import Cartel
 
 pinchotVer :: [Word]
-pinchotVer = [0,15,0,0]
+pinchotVer = [0,16,0,0]
 
 atleast :: NonEmptyString -> Version -> Package
 atleast n v = package n (gtEq v)
