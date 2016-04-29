@@ -6,7 +6,7 @@ module Main where
 import Cartel
 
 pinchotVer :: [Word]
-pinchotVer = [0,16,0,0]
+pinchotVer = [0,16,2,0]
 
 atleast :: NonEmptyString -> Version -> Package
 atleast n v = package n (gtEq v)
@@ -35,6 +35,9 @@ lens = atleast "lens" [4,13]
 listlike :: Package
 listlike = atleast "ListLike" [4,2,1]
 
+semigroups :: Package
+semigroups = atleast "semigroups" [0,18,1]
+
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
   [ otherExtensions ["TemplateHaskell"]
@@ -44,7 +47,7 @@ commonOptions =
 
 libraryDepends :: [Package]
 libraryDepends = [ base, containers, transformers, templateHaskell,
-  earley, lens, listlike ]
+  earley, lens, listlike, semigroups ]
 
 props :: Properties
 props = blank

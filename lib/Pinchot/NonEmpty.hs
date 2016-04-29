@@ -6,6 +6,7 @@
 module Pinchot.NonEmpty where
 
 import Control.Monad (join, ap)
+import Data.Semigroup (Semigroup((<>)))
 import Data.Sequence (Seq, (<|))
 import qualified Data.Sequence as Seq
 import qualified Control.Lens as Lens
@@ -17,6 +18,10 @@ data NonEmpty a = NonEmpty
   , _rest :: Seq a
   -- ^ All remaining items
   } deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance Semigroup (NonEmpty a) where
+  (NonEmpty a1 as) <> (NonEmpty b1 bs)
+    = NonEmpty a1 (as <> (b1 <| bs))
 
 Lens.makeLenses ''NonEmpty
 
