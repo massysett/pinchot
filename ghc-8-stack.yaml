@@ -1,4 +1,4 @@
-flags: {}
+flags: { }
 setup-info:
   ghc:
     linux64:

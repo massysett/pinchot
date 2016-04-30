@@ -46,11 +46,17 @@ libraryDepends :: [Package]
 libraryDepends = [ base, containers, transformers,
   earley, lens, listlike, semigroups ]
 
-templateHaskellBuildDepend :: HasBuildInfo a => FlagName -> a
-templateHaskellBuildDepend flagThOld = condBlock
-  (flag flagThOld)
-  (buildDepends [templateHaskellOld], [hsSourceDirs ["oldTemplateHaskell"]])
-  ([buildDepends [templateHaskellNew], hsSourceDirs ["newTemplateHaskell"]])
+templateHaskellBuildDepend :: HasBuildInfo a => FlagName -> [a]
+templateHaskellBuildDepend flagThOld
+  = [ condBlock
+        (flag flagThOld)
+        (buildDepends [templateHaskellOld],
+          [ hsSourceDirs ["oldTemplateHaskell"] ])
+        ([ buildDepends [templateHaskellNew]
+         , hsSourceDirs ["newTemplateHaskell"]
+         ])
+    , otherModules ["Pinchot.Internal.TemplateHaskellShim"]
+    ]
 
 props :: Properties
 props = mempty
@@ -97,7 +103,7 @@ main = defaultMain $ do
     ,   exposedModules libMods
       : buildDepends libraryDepends
       : templateHaskellBuildDepend flagThOld
-      : commonOptions
+      ++ commonOptions
     , [ githubHead "massysett" "penny"
       , executable "newman" $
         [ mainIs "newman.hs"
@@ -105,8 +111,8 @@ main = defaultMain $ do
             (buildable True, ( [ otherModules libMods
                                , hsSourceDirs ["exe"]
                                , buildDepends libraryDepends
-                               , templateHaskellBuildDepend flagThOld
-                               ] ++ commonOptions
+                               ] ++ templateHaskellBuildDepend flagThOld
+                                 ++ commonOptions
                              )
             )
             [buildable False]

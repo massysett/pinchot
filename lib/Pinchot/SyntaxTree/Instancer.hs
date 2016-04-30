@@ -60,12 +60,14 @@ semigroupInstances
   -> T.DecsQ
 semigroupInstances = fmap catMaybes . traverse f . toList . families
   where
+    nameT = T.varT $ T.mkName "t"
+    nameA = T.varT $ T.mkName "a"
     f rule@(Rule ruleName _ _) = case semigroupExpression "" rule of
       Nothing -> return Nothing
       Just expn -> fmap Just
         $ T.instanceD (T.cxt [])
-          [t| forall t a.
-              Semigroup.Semigroup ( $(T.conT (T.mkName ruleName)) t a) |]
+          [t| Semigroup.Semigroup
+            ( $(T.conT (T.mkName ruleName)) $(nameT) $(nameA)) |]
           [T.valD (T.varP '(Semigroup.<>))
                   (T.normalB expn) []]
 
@@ -88,11 +90,13 @@ monoidInstances
   -> T.DecsQ
 monoidInstances = fmap catMaybes . traverse f . toList . families
   where
+    nameT = T.varT $ T.mkName "t"
+    nameA = T.varT $ T.mkName "a"
     f rule@(Rule ruleName _ _)
       = case (semigroupExpression "" rule, memptyExpression "" rule) of
       (Just expAppend, Just expMempty) -> fmap Just
         $ T.instanceD (T.cxt [])
-          [t| forall t a. Monoid ( $( T.conT (T.mkName ruleName) ) t a ) |]
+          [t| Monoid ( $( T.conT (T.mkName ruleName) ) $(nameT) $(nameA) ) |]
           [ T.valD (T.varP 'mappend)
                    (T.normalB expAppend) []
           , T.valD (T.varP 'mempty)
