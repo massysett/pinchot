@@ -9,7 +9,6 @@ import Data.Foldable (foldlM, toList)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
-import qualified Language.Haskell.TH.Syntax as Syntax
 
 import Pinchot.NonEmpty (NonEmpty(NonEmpty))
 import qualified Pinchot.NonEmpty as NonEmpty
@@ -40,16 +39,12 @@ terminalizers
   -- ^ Qualifier for the module containing the data types created
   -- from the 'Rule's
  
-  -> T.Name
-  -- ^ Name of terminal type.  Typically you will get this through
-  -- the Template Haskell quoting mechanism, such as @''Char@.
-
   -> Seq (Rule t)
   -> T.Q [T.Dec]
 
-terminalizers qual termType
+terminalizers qual
   = fmap concat
-  . traverse (terminalizer qual termType)
+  . traverse (terminalizer qual)
   . toList
   . families
 
@@ -76,14 +71,10 @@ terminalizer
   -- ^ Qualifier for the module containing the data types created
   -- from the 'Rule's
  
-  -> T.Name
-  -- ^ Name of terminal type.  Typically you will get this through
-  -- the Template Haskell quoting mechanism, such as @''Char@.
-
   -> Rule t
   -> T.Q [T.Dec]
 
-terminalizer qual termType rule@(Rule nm _ _) = sequence [sig, expn]
+terminalizer qual rule@(Rule nm _ _) = sequence [sig, expn]
   where
     declName = "t'" ++ nm
     anyType = T.varT (T.mkName "a")
@@ -233,7 +224,6 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
     | otherwise -> do
         x <- T.newName "x"
-        let pat = T.conP (quald qual nm) [T.varP x]
         [| let getTermSeq = $(T.varE (lookupName lkp inner))
                getTerms (NonEmpty e1 es) = getTermSeq e1
                 `mappend` (join (fmap getTermSeq es))

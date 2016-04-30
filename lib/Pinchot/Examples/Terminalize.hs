@@ -13,4 +13,4 @@ import qualified Pinchot.Examples.SyntaxTrees as SyntaxTrees
 terminalizeAddress :: SyntaxTrees.Address t a -> NonEmpty (t, a)
 terminalizeAddress = $(terminalizeRuleExp "SyntaxTrees" rAddress)
 
-$(terminalizers "SyntaxTrees" ''Char [rAddress])
+$(terminalizers "SyntaxTrees" [rAddress])

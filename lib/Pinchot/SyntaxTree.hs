@@ -18,15 +18,12 @@ import Pinchot.Types
 -- applying this function to a single start symbol.  Example:
 -- "Pinchot.Examples.SyntaxTrees".
 syntaxTrees
-  :: T.Name
-  -- ^ Name of terminal type.  Typically you will get this from the
-  -- Template Haskell quoting mechanism, e.g. @''Char@.
-  -> [T.Name]
+  :: [T.Name]
   -- ^ What to derive, e.g. @[''Eq, ''Ord, ''Show]@
   -> Seq (Rule t)
   -> T.DecsQ
-syntaxTrees term derives
-  = traverse (ruleToType term derives)
+syntaxTrees derives
+  = traverse (ruleToType derives)
   . toList
   . families
 
@@ -42,13 +39,11 @@ branchConstructor (Branch nm rules) = T.normalC name fields
 
 -- | Makes the top-level declaration for a given rule.
 ruleToType
-  :: T.Name
-  -- ^ Name of terminal type
-  -> [T.Name]
+  :: [T.Name]
   -- ^ What to derive
   -> Rule t
   -> T.Q T.Dec
-ruleToType typeName derives (Rule nm _ ruleType) = case ruleType of
+ruleToType derives (Rule nm _ ruleType) = case ruleType of
   Terminal _ ->
     T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where

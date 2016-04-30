@@ -1,7 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Pinchot.SyntaxTree.Instancer where
 
+import qualified Data.Bifunctor as Bifunctor
+import Data.Maybe (catMaybes)
+import qualified Data.Semigroup as Semigroup
 import qualified Control.Lens as Lens
 import Data.Foldable (foldlM, toList)
 import Data.Map (Map)
@@ -14,6 +18,89 @@ import qualified Language.Haskell.TH as T
 import Pinchot.Types
 import Pinchot.Rules
 
+-- | Creates an instance of 'Bifunctor.Bifunctor' for every 'Rule'
+-- in the 'Seq' as well as their ancestors.
+--
+-- This function must be
+-- spliced in the same module as the module in which the syntax tree
+-- types are created.  This avoids problems with orphan instances.
+-- Since ancestors are included, you can get the entire tree of
+-- instances that you need by applying this function to a single
+-- start symbol.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
+
+bifunctorInstances
+  :: Seq (Rule t)
+  -> T.DecsQ
+bifunctorInstances = traverse f . toList . families
+  where
+    f rule@(Rule ruleName _ _) = T.instanceD (T.cxt [])
+      [t| Bifunctor.Bifunctor $(T.conT (T.mkName ruleName)) |]
+      [T.valD (T.varP 'Bifunctor.bimap)
+              (T.normalB (bimapExpression "" rule)) []]
+
+-- | Where possible, creates an instance of 'Semigroup.Semigroup'
+-- for every 'Rule' in the 'Seq' as well as their ancestors.  Only
+-- 'star' and 'plus' rules, as well as rules that through one or
+-- more layers of 'wrap' ultimately wrap a 'star' or 'plus' rule,
+-- get a 'Semigroup.Semigroup' instance.
+--
+-- This function must be
+-- spliced in the same module as the module in which the syntax tree
+-- types are created.  This avoids problems with orphan instances.
+-- Since ancestors are included, you can get the entire tree of
+-- instances that you need by applying this function to a single
+-- start symbol.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
+
+semigroupInstances
+  :: Seq (Rule t)
+  -> T.DecsQ
+semigroupInstances = fmap catMaybes . traverse f . toList . families
+  where
+    f rule@(Rule ruleName _ _) = case semigroupExpression "" rule of
+      Nothing -> return Nothing
+      Just expn -> fmap Just
+        $ T.instanceD (T.cxt [])
+          [t| forall t a.
+              Semigroup.Semigroup ( $(T.conT (T.mkName ruleName)) t a) |]
+          [T.valD (T.varP '(Semigroup.<>))
+                  (T.normalB expn) []]
+
+-- | Where possible, creates an instance of 'Monoid'
+-- for every 'Rule' in the 'Seq' as well as their ancestors.  Only
+-- 'star' rules, as well as rules that through one or
+-- more layers of 'wrap' ultimately wrap a 'star' rule,
+-- get a 'Monoid' instance.
+--
+-- This function must be
+-- spliced in the same module as the module in which the syntax tree
+-- types are created.  This avoids problems with orphan instances.
+-- Since ancestors are included, you can get the entire tree of
+-- instances that you need by applying this function to a single
+-- start symbol.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
+monoidInstances
+  :: Seq (Rule t)
+  -> T.DecsQ
+monoidInstances = fmap catMaybes . traverse f . toList . families
+  where
+    f rule@(Rule ruleName _ _)
+      = case (semigroupExpression "" rule, memptyExpression "" rule) of
+      (Just expAppend, Just expMempty) -> fmap Just
+        $ T.instanceD (T.cxt [])
+          [t| forall t a. Monoid ( $( T.conT (T.mkName ruleName) ) t a ) |]
+          [ T.valD (T.varP 'mappend)
+                   (T.normalB expAppend) []
+          , T.valD (T.varP 'mempty)
+                   (T.normalB expMempty) [] ]
+      _ -> return Nothing
+
+
+
 -- Creates an expression of type
 --
 -- (a -> b) -> (c -> d) -> RuleData a c -> RuleData b d
@@ -21,7 +108,7 @@ bimapExpression
   :: Qualifier
   -> Rule t
   -> T.ExpQ
-bimapExpression qual rule@(Rule ruleName _ ty) = do
+bimapExpression qual rule@(Rule ruleName _ _) = do
   fa <- T.newName "fa"
   fb <- T.newName "fb"
   val <- T.newName "val"
@@ -57,10 +144,10 @@ bimapLetBind
   -> T.Q T.DecQ
 bimapLetBind qual fa fb lkp (Rule name _ ty) = case ty of
   Terminal _ -> terminalBimapLetBind qual fa fb lkp name
-  NonTerminal b1 bs -> nonTerminalBimapLetBind qual fa fb lkp name
+  NonTerminal b1 bs -> return $ nonTerminalBimapLetBind qual lkp name
     (b1 : toList bs)
-  Wrap (Rule inner _ _) -> wrapBimapLetBind qual fa fb lkp name inner
-  Record sq -> recordBimapLetBind qual fa fb lkp name sq
+  Wrap (Rule inner _ _) -> wrapBimapLetBind qual lkp name inner
+  Record sq -> recordBimapLetBind qual lkp name sq
   Opt (Rule inner _ _) -> optBimapLetBind qual lkp name inner
   Star (Rule inner _ _) -> starBimapLetBind qual lkp name inner
   Plus (Rule inner _ _) -> plusBimapLetBind qual lkp name inner
@@ -85,32 +172,23 @@ terminalBimapLetBind qual fa fb lkp name = do
 
 nonTerminalBimapLetBind
   :: Qualifier
-  -> T.Name
-  -> T.Name
   -> Map RuleName T.Name
   -> RuleName
   -> [Branch a]
-  -> T.Q T.DecQ
-nonTerminalBimapLetBind qual fa fb lkp name branches = do
-  val <- T.newName $ "nonTerminalBimapLetBind" ++ name
-  return $ T.funD val 
-  {-
-  let matches = fmap (bimapBranch qual lkp fa fb) branches
-      expn = T.lamE [T.varP val] (T.caseE (T.varE val) matches)
-  return $ T.valD (T.varP (errLookup name lkp)) (T.normalB expn) []
-  -}
+  -> T.DecQ
+nonTerminalBimapLetBind qual lkp name branches =
+  let mkClause (Branch branchName branches)
+        = recordBimapClause qual lkp branchName branches
+      clauses = fmap mkClause branches
+  in T.funD (errLookup name lkp) clauses
 
 wrapBimapLetBind
   :: Qualifier
-  -> T.Name
-  -> T.Name
   -> Map RuleName T.Name
   -> RuleName
-  -- ^ Name of this rule
   -> RuleName
-  -- ^ Name of inner rule
   -> T.Q T.DecQ
-wrapBimapLetBind qual fa fb lkp name inner = do
+wrapBimapLetBind qual lkp name inner = do
   val <- T.newName "wrapLetBind"
   let expn = T.lamE [T.conP (quald qual name) [T.varP val]]
         [| $(T.conE (quald qual name))
@@ -119,21 +197,27 @@ wrapBimapLetBind qual fa fb lkp name inner = do
 
 recordBimapLetBind
   :: Qualifier
-  -> T.Name
-  -> T.Name
   -> Map RuleName T.Name
   -> RuleName
   -> Seq (Rule t)
   -> T.Q T.DecQ
-recordBimapLetBind qual fa fb lkp name sq = do
+recordBimapLetBind qual lkp name sq = do
+  let clause = recordBimapClause qual lkp name sq
+  return $ T.funD (errLookup name lkp) [clause]
+
+recordBimapClause
+  :: Qualifier
+  -> Map RuleName T.Name
+  -> RuleName
+  -> Seq (Rule t)
+  -> T.ClauseQ
+recordBimapClause qual lkp name sq = do
   pairs <- traverse (recordBimapLetBindField lkp) . toList $ sq
   let body = foldl f (T.conE (quald qual name)) . fmap snd $ pairs
         where
           f acc expn = [| $(acc) $(expn) |]
   let pats = fmap fst pairs
-  let clause = T.clause [T.conP (quald qual name) pats]
-        (T.normalB body) []
-  return $ T.funD (errLookup name lkp) [clause]
+  T.clause [T.conP (quald qual name) pats] (T.normalB body) []
 
 recordBimapLetBindField
   :: Map RuleName T.Name
@@ -156,7 +240,7 @@ optBimapLetBind qual lkp name inner = do
   val <- T.newName $ "optBimapLetBind" ++ name
   let body = [| $(T.conE (quald qual name)) $ case $(T.varE val) of
                   Nothing -> Nothing
-                  Just v -> $(T.varE (errLookup inner lkp)) v
+                  Just v -> Just $ $(T.varE (errLookup inner lkp)) v
              |]
   let clause = T.clause [T.conP (quald qual name) [T.varP val]]
         (T.normalB body) []
@@ -173,7 +257,7 @@ starBimapLetBind
 starBimapLetBind qual lkp name inner = do
   val <- T.newName $ "starBimapLetBind" ++ name
   let body = [| $(T.conE (quald qual name))
-                $ fmap ( $(T.varE (errLookup inner lkp)) $(T.varE val)) |]
+                $ fmap $(T.varE (errLookup inner lkp)) $(T.varE val) |]
   let clause = T.clause [T.conP (quald qual name) [T.varP val]]
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
@@ -189,7 +273,7 @@ plusBimapLetBind
 plusBimapLetBind qual lkp name inner = do
   val <- T.newName $ "plusBimapLetBind" ++ name
   let body = [| $(T.conE (quald qual name))
-                $ fmap ( $(T.varE (errLookup inner lkp)) $(T.varE val)) |]
+                $ fmap $(T.varE (errLookup inner lkp)) $(T.varE val) |]
   let clause = T.clause [T.conP (quald qual name) [T.varP val]]
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
@@ -215,47 +299,6 @@ nameMap = foldlM f Map.empty . family
       thName <- T.newName $ "bindName" ++ ruleName
       return $ Map.insert ruleName thName acc
 
-bimapBranch
-  :: Qualifier
-  -> Map RuleName T.Name
-  -- ^ Name of expression for each rule
-  -> T.Name
-  -- ^ Expression for @a -> b@
-  -> T.Name
-  -- ^ Expression for @c -> d@
-  -> Branch t
-  -> T.Q T.DecQ
-bimapBranch qual lkp fa fb (Branch branchName rules)
-  = recordBimapLetBind qual fa fb lkp branchName rules
-  
-
-{-
-bimapBranch
-  :: Qualifier
-  -> Map RuleName T.Name
-  -- ^ Name of expression for each rule
-  -> T.Name
-  -- ^ Expression for @a -> b@
-  -> T.Name
-  -- ^ Expression for @c -> d@
-  -> Branch t
-  -> T.MatchQ
-bimapBranch qual ruleExps expA expB (Branch branchName rules) = do
-  let f (pats, exps) (Rule ruleName _ _) = do
-        let ruleExp = errLookup ruleName ruleExps
-        x <- T.newName "x"
-        let pat' = pats `Lens.snoc` (T.varP x)
-            exp' = [| $(T.varE ruleExp) $(T.varE expA) $(T.varE expB)
-              $(T.varE x) |]
-        return (pat', exp')
-  (pats, expn) <- foldlM f (Seq.empty, [| T.varE (quald qual branchName) |])
-    rules
-  let pat = T.conP (quald qual branchName) (toList pats)
-      body = T.normalB expn
-  T.match pat body []
--}
-
-    
 
 -- | If possible, creates an expression of type
 --
@@ -324,6 +367,7 @@ semigroupCtors (Rule ruleName _ ty) = case ty of
     rest <- semigroupCtors r
     return $ ruleName `Lens.cons` rest
   Plus _ -> Just (Seq.singleton ruleName)
+  Star _ -> Just (Seq.singleton ruleName)
   _ -> Nothing
 
 wrappedSemigroupExpression
@@ -351,4 +395,4 @@ wrappedSemigroupExpression append qual rules = names >>= makeExp
         mkRes = foldr f
           [| $(T.varE append) $(T.varE x1) $(T.varE x2) |] rules
           where
-            f rule acc = T.appE (T.varE (quald qual rule)) acc
+            f rule acc = T.appE (T.conE (quald qual rule)) acc

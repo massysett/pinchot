@@ -164,9 +164,6 @@ allRulesRecord
   :: Qualifier
   -- ^ Qualifier for data types corresponding to those created from
   -- the 'Rule's
-  -> T.Name
-  -- ^ Name of terminal type.  Typically you will get this through
-  -- the Template Haskell quoting mechanism, such as @''Char@.
   -> Seq (Rule t)
   -- ^ A record is created that holds a value for each 'Rule'
   -- in the 'Seq', as well as for every ancestor of these 'Rule's.
@@ -178,7 +175,7 @@ allRulesRecord
   --
   -- where @NAME@ is the name of the type.  Don't count on these
   -- records being in any particular order.
-allRulesRecord prefix termName ruleSeq
+allRulesRecord prefix ruleSeq
   = sequence [T.dataD (return []) (T.mkName nameStr) tys [con] []]
   where
     nameStr = "Productions"

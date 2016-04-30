@@ -14,16 +14,22 @@
 module Pinchot.Examples.SyntaxTrees where
 
 import Pinchot
-import Pinchot.SyntaxTree.Wrappers
 import Pinchot.Examples.Postal
-
-import qualified Control.Lens as Lens
 
 -- This generates the data types corresponding to the 'rAddress'
 -- 'Rule', as well as all the ancestors of that 'Rule'.
-$(syntaxTrees ''Char
+$(syntaxTrees
   [''Eq, ''Ord, ''Show, ''Foldable, ''Traversable, ''Functor]
   [rAddress])
 
 -- This generates intances of the Lens Wrapped typeclass.
 $(wrappedInstances [rAddress])
+
+-- This generates instances of the Bifunctor typeclass.
+$(bifunctorInstances [rAddress])
+
+-- This generates instances of the Semigroup typeclass.
+$(semigroupInstances [rAddress])
+
+-- This generates instances of the Monoid typeclass.
+$(monoidInstances [rAddress])

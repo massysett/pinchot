@@ -11,4 +11,4 @@ import Pinchot
 import Pinchot.Examples.Postal
 import qualified Pinchot.Examples.SyntaxTrees as SyntaxTrees
 
-$(allRulesRecord "SyntaxTrees" ''Char [rAddress])
+$(allRulesRecord "SyntaxTrees" [rAddress])

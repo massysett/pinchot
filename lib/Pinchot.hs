@@ -83,8 +83,11 @@ module Pinchot
   , syntaxTrees
   , allRulesRecord
 
-  -- ** Wrappers and optics
+  -- ** Typeclass instances and optics
   , wrappedInstances
+  , bifunctorInstances
+  , semigroupInstances
+  , monoidInstances
   , rulesToOptics
 
   -- * Creating Earley grammars
@@ -113,6 +116,7 @@ import Pinchot.Intervals
 import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.SyntaxTree
+import Pinchot.SyntaxTree.Instancer
 import Pinchot.SyntaxTree.Optics
 import Pinchot.SyntaxTree.Wrappers
 import Pinchot.Terminalize

@@ -1,9 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Pinchot.SyntaxTree.Optics where
 
-import Data.Coerce (coerce)
 import Data.Foldable (toList)
-import Data.Maybe (catMaybes)
 import Data.Sequence (Seq)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
@@ -98,7 +96,6 @@ terminalToOptics qual termName nm ivls = do
   return [e1, e2]
   where
     anyType = T.varT (T.mkName "a")
-    charType = T.varT (T.mkName "t")
     prismName = T.varP (T.mkName ('_' : nm))
     fetchPat = T.conP (quald qual nm) [T.varP (T.mkName "_x")]
     fetchName = T.varE (T.mkName "_x")
