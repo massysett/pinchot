@@ -160,7 +160,7 @@ earleyGrammarFromRule prefix r@(Rule top _ _) = recursiveDo binds final
 -- This always creates a single product type whose name is
 -- @Productions@; currently the name cannot be configured.
 --
--- Example: "Pinchot.Examples.SyntaxTrees".
+-- Example: "Pinchot.Examples.AllRulesRecord".
 allRulesRecord
   :: Qualifier
   -- ^ Qualifier for data types corresponding to those created from
