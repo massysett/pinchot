@@ -15,6 +15,7 @@ import Data.Foldable (toList)
 import Data.Sequence ((<|), viewl, ViewL(EmptyL, (:<)), Seq)
 import qualified Data.Sequence as Seq
 import qualified Language.Haskell.TH as T
+import Pinchot.Internal.TemplateHaskellShim (dataD)
 import qualified Language.Haskell.TH.Syntax as Syntax
 import qualified Text.Earley
 
@@ -176,7 +177,7 @@ allRulesRecord
   -- where @NAME@ is the name of the type.  Don't count on these
   -- records being in any particular order.
 allRulesRecord prefix ruleSeq
-  = sequence [T.dataD (return []) (T.mkName nameStr) tys [con] []]
+  = sequence [dataD (return []) (T.mkName nameStr) tys [con] []]
   where
     nameStr = "Productions"
     tys = [T.PlainTV (T.mkName "r"), T.PlainTV (T.mkName "t"),

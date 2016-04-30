@@ -1,6 +1,3 @@
-#!/usr/bin/env stack
--- stack --resolver=lts-5.4 --install-ghc runghc --package=cartel
-
 module Main where
 
 import Cartel
@@ -8,35 +5,35 @@ import Cartel
 pinchotVer :: [Word]
 pinchotVer = [0,18,0,0]
 
-atleast :: NonEmptyString -> Version -> Package
-atleast n v = package n (gtEq v)
-
 base :: Package
 base = closedOpen "base" [4,8,0,0] [5]
 
 containers :: Package
-containers = atleast "containers" [0,5,6,2]
+containers = atLeast "containers" [0,5,6,2]
 
 transformers :: Package
-transformers = atleast "transformers" [0,4,2,0]
+transformers = atLeast "transformers" [0,4,2,0]
 
-templateHaskell :: Package
-templateHaskell = atleast "template-haskell" [2,10]
+templateHaskellOld :: Package
+templateHaskellOld = nextBreaking "template-haskell" [2,10]
+
+templateHaskellNew :: Package
+templateHaskellNew = atLeast "template-haskell" [2,11]
 
 earley :: Package
-earley = atleast "Earley" [0,11,0,1]
+earley = atLeast "Earley" [0,11,0,1]
 
 prettyShow :: Package
-prettyShow = atleast "pretty-show" [1,6,9]
+prettyShow = atLeast "pretty-show" [1,6,9]
 
 lens :: Package
-lens = atleast "lens" [4,13]
+lens = atLeast "lens" [4,13]
 
 listlike :: Package
-listlike = atleast "ListLike" [4,2,1]
+listlike = atLeast "ListLike" [4,2,1]
 
 semigroups :: Package
-semigroups = atleast "semigroups" [0,18,1]
+semigroups = atLeast "semigroups" [0,18,1]
 
 commonOptions :: HasBuildInfo a => [a]
 commonOptions =
@@ -46,11 +43,17 @@ commonOptions =
   ]
 
 libraryDepends :: [Package]
-libraryDepends = [ base, containers, transformers, templateHaskell,
+libraryDepends = [ base, containers, transformers,
   earley, lens, listlike, semigroups ]
 
+templateHaskellBuildDepend :: HasBuildInfo a => FlagName -> a
+templateHaskellBuildDepend flagThOld = condBlock
+  (flag flagThOld)
+  (buildDepends [templateHaskellOld], [hsSourceDirs ["oldTemplateHaskell"]])
+  ([buildDepends [templateHaskellNew], hsSourceDirs ["newTemplateHaskell"]])
+
 props :: Properties
-props = blank
+props = mempty
   { name = "pinchot"
   , version = pinchotVer
   , cabalVersion = Just (1,14)
@@ -84,10 +87,16 @@ main = defaultMain $ do
     , flagDefault = False
     , flagManual = True
     }
+  flagThOld <- makeFlag "oldTemplateHaskell" $ FlagOpts
+    { flagDescription = "Use version of Template Haskell before 2.11"
+    , flagDefault = False
+    , flagManual = False
+    }
   return
     ( props
     ,   exposedModules libMods
       : buildDepends libraryDepends
+      : templateHaskellBuildDepend flagThOld
       : commonOptions
     , [ githubHead "massysett" "penny"
       , executable "newman" $
@@ -96,6 +105,7 @@ main = defaultMain $ do
             (buildable True, ( [ otherModules libMods
                                , hsSourceDirs ["exe"]
                                , buildDepends libraryDepends
+                               , templateHaskellBuildDepend flagThOld
                                ] ++ commonOptions
                              )
             )

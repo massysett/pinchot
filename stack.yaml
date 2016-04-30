@@ -11,7 +11,9 @@ packages:
 extra-deps: []
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+flags:
+  pinchot:
+    oldTemplateHaskell: true
 
 # Extra package databases containing global packages
 extra-package-dbs: []

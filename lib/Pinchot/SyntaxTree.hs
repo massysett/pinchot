@@ -7,6 +7,7 @@ module Pinchot.SyntaxTree where
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
+import Pinchot.Internal.TemplateHaskellShim (newtypeD, dataD)
 
 import Pinchot.NonEmpty
 import Pinchot.Rules
@@ -45,24 +46,24 @@ ruleToType
   -> T.Q T.Dec
 ruleToType derives (Rule nm _ ruleType) = case ruleType of
   Terminal _ ->
-    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict
           [t| ( $(charTypeVar), $(anyTypeVar) ) |] ]
 
-  NonTerminal b1 bs -> T.dataD (T.cxt []) name [charType, anyType] cons derives
+  NonTerminal b1 bs -> dataD (T.cxt []) name [charType, anyType] cons derives
     where
       cons = branchConstructor b1 : toList (fmap branchConstructor bs)
 
   Wrap (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [ T.strictType T.notStrict
             [t| $(T.conT (T.mkName inner)) $(charTypeVar) $(anyTypeVar) |] ]
 
-  Record sq -> T.dataD (T.cxt []) name [charType, anyType] [ctor] derives
+  Record sq -> dataD (T.cxt []) name [charType, anyType] [ctor] derives
     where
       ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
       mkField num (Rule rn _ _) = T.varStrictType (T.mkName fldNm)
@@ -72,7 +73,7 @@ ruleToType derives (Rule nm _ ruleType) = case ruleType of
           fldNm = '_' : recordFieldName num nm rn
 
   Opt (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name
         [T.strictType T.notStrict
@@ -80,7 +81,7 @@ ruleToType derives (Rule nm _ ruleType) = case ruleType of
                                                  $(anyTypeVar)) |]]
 
   Star (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
     where
       newtypeCon = T.normalC name [sq]
         where
@@ -89,7 +90,7 @@ ruleToType derives (Rule nm _ ruleType) = case ruleType of
                                                  $(anyTypeVar) ) |]
 
   Plus (Rule inner _ _) ->
-    T.newtypeD (T.cxt []) name [charType, anyType] cons derives
+    newtypeD (T.cxt []) name [charType, anyType] cons derives
     where
       cons = T.normalC name [ne]
         where
