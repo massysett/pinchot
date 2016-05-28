@@ -3,7 +3,7 @@ module Main where
 import Cartel
 
 pinchotVer :: [Word]
-pinchotVer = [0,18,0,0]
+pinchotVer = [0,18,0,2]
 
 base :: Package
 base = closedOpen "base" [4,8,0,0] [5]
@@ -73,7 +73,11 @@ props = mempty
   , homepage = "http://www.github.com/massysett/pinchot"
   , bugReports = "http://www.github.com/massysett/pinchot/issues"
   , synopsis = "Write grammars, not parsers"
-  , extraSourceFiles = ["README"]
+  , extraSourceFiles =
+      [ "newTemplateHaskell/Pinchot/Internal/TemplateHaskellShim.hs"
+      , "oldTemplateHaskell/Pinchot/Internal/TemplateHaskellShim.hs"
+      , "README"
+      ]
   , description =
     [ "Pinchot provides a simple language that you use to write a Haskell"
     , "value that describes a context-free grammar.  Using this value, you can"
