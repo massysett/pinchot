@@ -1,13 +1,21 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 module Pinchot.Types where
 
 import Pinchot.Intervals
 
 import qualified Control.Lens as Lens
 import Data.Data (Data)
+import GHC.Generics (Generic)
 import Data.Sequence (Seq)
+import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Language.Haskell.TH as T
+import Text.Show.Pretty (PrettyVal(prettyVal))
+import qualified Text.Show.Pretty as Pretty
+
+import Pinchot.Pretty
 
 -- | Type synonym for the name of a production rule.  This will be the
 -- name of the type constructor for the corresponding type that will
@@ -42,7 +50,7 @@ data Rule t = Rule
   { _ruleName :: RuleName
   , _ruleDescription :: Maybe String
   , _ruleType :: RuleType t
-  } deriving (Eq, Ord, Show, Data)
+  } deriving (Eq, Ord, Show, Data, Generic, PrettyVal)
 
 -- Can't use Template Haskell in this module due to corecursive
 -- types
@@ -75,10 +83,16 @@ branches :: Lens.Lens' (Branch t) (Seq (Rule t))
 branches
   = Lens.lens _branches (\b s -> b { _branches = s})
 
+instance PrettyVal t => PrettyVal (Branch t) where
+  prettyVal (Branch b1 bs) = Pretty.Rec "Pinchot.Types.Branch"
+    [ ("_branchName", prettyVal b1)
+    , ("_branches", prettySeq prettyVal bs)
+    ]
+
 -- | The type of a particular rule.
 data RuleType t
   = Terminal (Intervals t)
-  | NonTerminal (Branch t) (Seq (Branch t))
+  | NonTerminal (NonEmptySeq (Branch t))
   | Wrap (Rule t)
   | Record (Seq (Rule t))
   | Opt (Rule t)
@@ -90,9 +104,9 @@ _Terminal :: Lens.Prism' (RuleType t) (Intervals t)
 _Terminal = Lens.prism' (\i -> Terminal i)
   (\r -> case r of { Terminal i -> Just i; _ -> Nothing })
 
-_NonTerminal :: Lens.Prism' (RuleType t) (Branch t, Seq (Branch t))
-_NonTerminal = Lens.prism' (\(b, bs) -> NonTerminal b bs)
-  (\r -> case r of { NonTerminal b bs -> Just (b, bs); _ -> Nothing })
+_NonTerminal :: Lens.Prism' (RuleType t) (NonEmptySeq (Branch t))
+_NonTerminal = Lens.prism' (\b -> NonTerminal b)
+  (\r -> case r of { NonTerminal b -> Just b; _ -> Nothing })
 
 _Wrap :: Lens.Prism' (RuleType t) (Rule t)
 _Wrap = Lens.prism' (\r -> Wrap r)
@@ -113,6 +127,19 @@ _Star = Lens.prism' (\r -> Star r)
 _Plus :: Lens.Prism' (RuleType t) (Rule t)
 _Plus = Lens.prism' (\r -> Plus r)
   (\r -> case r of { Plus x -> Just x; _ -> Nothing })
+
+instance PrettyVal t => PrettyVal (RuleType t) where
+  prettyVal x = case x of
+    Terminal ivl -> Pretty.Con (ty "Terminal") [(prettyVal ivl)]
+    NonTerminal ne -> Pretty.Con (ty "NonTerminal")
+      [prettyNonEmptySeq prettyVal ne]
+    Wrap r -> Pretty.Con (ty "Wrap") [prettyVal r]
+    Record rs -> Pretty.Con (ty "Record") [prettySeq prettyVal rs]
+    Opt rs -> Pretty.Con (ty "Opt") [prettyVal rs]
+    Star rs -> Pretty.Con (ty "Star") [prettyVal rs]
+    Plus rs -> Pretty.Con (ty "Plus") [prettyVal rs]
+    where
+      ty = ("Pinchot.Types." ++)
 
 -- | The name of a field in a record, without the leading
 -- underscore.
@@ -170,7 +197,7 @@ data Loc = Loc
   { _line :: Int
   , _col :: Int
   , _pos :: Int
-  } deriving (Eq, Ord, Read, Show, Data)
+  } deriving (Eq, Ord, Read, Show, Data, Generic, PrettyVal)
 
 line :: Lens.Lens' Loc Int
 line = Lens.lens _line (\r l -> r { _line = l })

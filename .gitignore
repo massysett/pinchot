@@ -2,5 +2,6 @@
 
 .stack-work/
 dist/
+TAGS
 # Do not track project's cabal file
 pinchot.cabal

@@ -17,6 +17,10 @@ import Data.Sequence (Seq, ViewL(EmptyL, (:<)), viewl, (<|))
 import qualified Data.Sequence as Seq
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+import Text.Show.Pretty (PrettyVal, Value)
+import qualified Text.Show.Pretty as Pretty
+
+import Pinchot.Pretty
 
 -- | Groups of terminals.  Create an 'Intervals' using 'include',
 -- 'exclude', 'solo' and 'pariah'.  Combine 'Intervals' using
@@ -35,6 +39,13 @@ data Intervals a = Intervals
   } deriving (Eq, Ord, Show, Data)
 
 Lens.makeLenses ''Intervals
+
+instance PrettyVal a => PrettyVal (Intervals a) where
+  prettyVal (Intervals inc exc)
+    = Pretty.Rec "Pinchot.Intervals.Intervals"
+      [ ("_included", prettySeq Pretty.prettyVal inc)
+      , ("_excluded", prettySeq Pretty.prettyVal exc)
+      ]
 
 instance Functor Intervals where
   fmap f (Intervals a b) = Intervals (fmap g a) (fmap g b)
