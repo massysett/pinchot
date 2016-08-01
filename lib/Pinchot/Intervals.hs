@@ -1,6 +1,7 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 -- | Intervals describe terminal symbols.  Ordinarily you will not
 -- need to use this module, as "Pinchot" re-exports the things you
@@ -9,6 +10,7 @@ module Pinchot.Intervals where
 
 import qualified Control.Lens as Lens
 import Control.Monad (join)
+import Data.Data (Data)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
 import Data.Sequence (Seq, ViewL(EmptyL, (:<)), viewl, (<|))
@@ -30,7 +32,7 @@ data Intervals a = Intervals
   , _excluded :: Seq (a, a)
   -- ^ Each symbol in 'excluded' is not in the 'Intervals', even if
   -- the symbol is 'included'.
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Data)
 
 Lens.makeLenses ''Intervals
 

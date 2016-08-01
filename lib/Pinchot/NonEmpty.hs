@@ -1,11 +1,13 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 -- | Sequences that always contain at least one element.
 
 module Pinchot.NonEmpty where
 
 import Control.Monad (join, ap)
+import Data.Data (Data)
 import Data.Semigroup (Semigroup((<>)))
 import Data.Sequence (Seq, (<|))
 import qualified Data.Sequence as Seq
@@ -17,7 +19,7 @@ data NonEmpty a = NonEmpty
   -- ^ The first item
   , _rest :: Seq a
   -- ^ All remaining items
-  } deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  } deriving (Eq, Ord, Show, Data, Functor, Foldable, Traversable)
 
 instance Semigroup (NonEmpty a) where
   (NonEmpty a1 as) <> (NonEmpty b1 bs)

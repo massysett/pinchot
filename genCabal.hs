@@ -3,7 +3,7 @@ module Main where
 import Cartel
 
 pinchotVer :: [Word]
-pinchotVer = [0,18,0,2]
+pinchotVer = [0,18,2,0]
 
 base :: Package
 base = closedOpen "base" [4,8,0,0] [5]

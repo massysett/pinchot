@@ -1,9 +1,11 @@
 {-# OPTIONS_HADDOCK not-home #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Pinchot.Types where
 
 import Pinchot.Intervals
 
 import qualified Control.Lens as Lens
+import Data.Data (Data)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
 
@@ -40,7 +42,7 @@ data Rule t = Rule
   { _ruleName :: RuleName
   , _ruleDescription :: Maybe String
   , _ruleType :: RuleType t
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Data)
 
 -- Can't use Template Haskell in this module due to corecursive
 -- types
@@ -63,7 +65,7 @@ ruleType
 data Branch t = Branch
   { _branchName :: BranchName
   , _branches :: Seq (Rule t)
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Data)
 
 branchName :: Lens.Lens' (Branch t) BranchName
 branchName
@@ -82,7 +84,7 @@ data RuleType t
   | Opt (Rule t)
   | Star (Rule t)
   | Plus (Rule t)
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Data)
 
 _Terminal :: Lens.Prism' (RuleType t) (Intervals t)
 _Terminal = Lens.prism' (\i -> Terminal i)
@@ -168,7 +170,7 @@ data Loc = Loc
   { _line :: Int
   , _col :: Int
   , _pos :: Int
-  } deriving (Eq, Ord, Read, Show)
+  } deriving (Eq, Ord, Read, Show, Data)
 
 line :: Lens.Lens' Loc Int
 line = Lens.lens _line (\r l -> r { _line = l })
