@@ -1,8 +1,0 @@
-Pinchot helps you build Haskell data types and parsers
-corresponding to a context-free grammar.
-
-Documentation is contained in the Haddock markup in the
-source files.
-
-Pinchot is licensed under the BSD license; see the
-LICENSE file.

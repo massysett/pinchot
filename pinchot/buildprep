@@ -1,5 +1,5 @@
 #!/bin/sh
 # Generates the project's .cabal file.
 # Must be run with the containing directory as the current directory.
-cd gen-pinchot-cabal
+cd ../gen-pinchot-cabal
 sh buildprep
