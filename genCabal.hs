@@ -6,7 +6,7 @@ pinchotVer :: [Word]
 pinchotVer = [0,18,2,0]
 
 base :: Package
-base = closedOpen "base" [4,8,0,0] [5]
+base = closedOpen "base" [4,9,0,0] [5]
 
 containers :: Package
 containers = atLeast "containers" [0,5,6,2]
@@ -14,11 +14,8 @@ containers = atLeast "containers" [0,5,6,2]
 transformers :: Package
 transformers = atLeast "transformers" [0,4,2,0]
 
-templateHaskellOld :: Package
-templateHaskellOld = nextBreaking "template-haskell" [2,10]
-
-templateHaskellNew :: Package
-templateHaskellNew = atLeast "template-haskell" [2,11]
+templateHaskell :: Package
+templateHaskell = atLeast "template-haskell" [2,11]
 
 earley :: Package
 earley = atLeast "Earley" [0,11,0,1]
@@ -43,20 +40,8 @@ commonOptions =
   ]
 
 libraryDepends :: [Package]
-libraryDepends = [ base, containers, transformers,
+libraryDepends = [ base, containers, transformers, templateHaskell,
   earley, lens, listlike, semigroups ]
-
-templateHaskellBuildDepend :: HasBuildInfo a => FlagName -> [a]
-templateHaskellBuildDepend flagThOld
-  = [ condBlock
-        (flag flagThOld)
-        (buildDepends [templateHaskellOld],
-          [ hsSourceDirs ["oldTemplateHaskell"] ])
-        ([ buildDepends [templateHaskellNew]
-         , hsSourceDirs ["newTemplateHaskell"]
-         ])
-    , otherModules ["Pinchot.Internal.TemplateHaskellShim"]
-    ]
 
 props :: Properties
 props = mempty
@@ -106,8 +91,7 @@ main = defaultMain $ do
     ( props
     ,   exposedModules libMods
       : buildDepends libraryDepends
-      : templateHaskellBuildDepend flagThOld
-      ++ commonOptions
+      : commonOptions
     , [ githubHead "massysett" "penny"
       , executable "newman" $
         [ mainIs "newman.hs"
@@ -115,8 +99,7 @@ main = defaultMain $ do
             (buildable True, ( [ otherModules libMods
                                , hsSourceDirs ["exe"]
                                , buildDepends libraryDepends
-                               ] ++ templateHaskellBuildDepend flagThOld
-                                 ++ commonOptions
+                               ] ++ commonOptions
                              )
             )
             [buildable False]

@@ -7,7 +7,6 @@ module Pinchot.SyntaxTree where
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import qualified Language.Haskell.TH as T
-import Pinchot.Internal.TemplateHaskellShim (newtypeD, dataD)
 
 import Pinchot.NonEmpty
 import Pinchot.Rules
@@ -32,8 +31,11 @@ branchConstructor :: Branch t -> T.ConQ
 branchConstructor (Branch nm rules) = T.normalC name fields
   where
     name = T.mkName nm
-    mkField (Rule n _ _) = T.strictType T.notStrict
+    mkField (Rule n _ _) = notStrict
       [t| $(T.conT (T.mkName n)) $(charTypeVar) $(anyTypeVar) |]
+      where
+        notStrict = T.bangType
+          (T.bang T.noSourceUnpackedness T.noSourceStrictness)
     fields = toList . fmap mkField $ rules
     anyTypeVar = T.varT (T.mkName "a")
     charTypeVar = T.varT (T.mkName "t")
@@ -44,57 +46,57 @@ ruleToType
   -- ^ What to derive
   -> Rule t
   -> T.Q T.Dec
-ruleToType derives (Rule nm _ ruleType) = case ruleType of
+ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
   Terminal _ ->
-    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [T.strictType T.notStrict
+        [notStrict
           [t| ( $(charTypeVar), $(anyTypeVar) ) |] ]
 
-  NonTerminal b1 bs -> dataD (T.cxt []) name [charType, anyType] cons derives
+  NonTerminal b1 bs -> T.dataD (T.cxt []) name [charType, anyType] Nothing cons derives
     where
       cons = branchConstructor b1 : toList (fmap branchConstructor bs)
 
   Wrap (Rule inner _ _) ->
-    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [ T.strictType T.notStrict
+        [ notStrict
             [t| $(T.conT (T.mkName inner)) $(charTypeVar) $(anyTypeVar) |] ]
 
-  Record sq -> dataD (T.cxt []) name [charType, anyType] [ctor] derives
+  Record sq -> T.dataD (T.cxt []) name [charType, anyType] Nothing [ctor] derives
     where
       ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
-      mkField num (Rule rn _ _) = T.varStrictType (T.mkName fldNm)
-        (T.strictType T.notStrict
+      mkField num (Rule rn _ _) = T.varBangType (T.mkName fldNm)
+        (notStrict
           [t| $(T.conT (T.mkName rn)) $(charTypeVar) $(anyTypeVar) |])
         where
           fldNm = '_' : recordFieldName num nm rn
 
   Opt (Rule inner _ _) ->
-    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing newtypeCon derives
     where
       newtypeCon = T.normalC name
-        [T.strictType T.notStrict
+        [notStrict
           [t| Maybe ( $(T.conT (T.mkName inner)) $(charTypeVar)
                                                  $(anyTypeVar)) |]]
 
   Star (Rule inner _ _) ->
-    newtypeD (T.cxt []) name [charType, anyType] newtypeCon derives
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing newtypeCon derives
     where
       newtypeCon = T.normalC name [sq]
         where
-          sq = T.strictType T.notStrict
+          sq = notStrict
             [t| Seq ( $(T.conT (T.mkName inner)) $(charTypeVar)
                                                  $(anyTypeVar) ) |]
 
   Plus (Rule inner _ _) ->
-    newtypeD (T.cxt []) name [charType, anyType] cons derives
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing cons derives
     where
       cons = T.normalC name [ne]
         where
-          ne = T.strictType T.notStrict [t| NonEmpty $(ins) |]
+          ne = notStrict [t| NonEmpty $(ins) |]
             where
               ins = [t| $(T.conT (T.mkName inner))
                 $(charTypeVar) $(anyTypeVar) |]
@@ -105,5 +107,8 @@ ruleToType derives (Rule nm _ ruleType) = case ruleType of
     anyTypeVar = T.varT (T.mkName "a")
     charType = T.PlainTV (T.mkName "t")
     charTypeVar = T.varT (T.mkName "t")
+    derives = mapM T.conT deriveNames
+    notStrict = T.bangType
+      (T.bang T.noSourceUnpackedness T.noSourceStrictness)
 
 
