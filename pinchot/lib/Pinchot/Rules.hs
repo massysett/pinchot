@@ -2,13 +2,12 @@
 {-# LANGUAGE OverloadedLists #-}
 module Pinchot.Rules where
 
-import qualified Control.Lens as Lens
 import Control.Monad (join)
 import Control.Monad.Trans.State (get, put, State)
 import qualified Control.Monad.Trans.State as State
-import Data.Monoid ((<>))
 import Data.Sequence (Seq, (<|))
 import qualified Data.Sequence as Seq
+import qualified Data.Sequence.NonEmpty as NE
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -53,11 +52,9 @@ nonTerminal
   -- must have at least one element; otherwise, an error will
   -- result.
   -> Rule t
-nonTerminal n branches = case Lens.uncons branches of
+nonTerminal n branches = case NE.seqToNonEmptySeq branches of
   Nothing -> error $ "nonTerminal: rule has no branches: " ++ n
-  Just (b, bs) -> rule n (NonTerminal (f b) (fmap f bs))
-    where
-      f = uncurry Branch
+  Just bs -> rule n . NonTerminal . fmap (uncurry Branch) $ bs
 
 -- | Creates a non-terminal production rule where each branch has
 -- only one production.  This function ultimately uses
@@ -183,10 +180,9 @@ getAncestors r@(Rule name _ ty) = do
       put (Set.insert name set)
       case ty of
         Terminal _ -> return (Seq.singleton r)
-        NonTerminal b1 bs -> do
-          as1 <- branchAncestors b1
-          ass <- fmap join . traverse branchAncestors $ bs
-          return $ r <| as1 <> ass
+        NonTerminal bs -> do
+          ass <- fmap join . traverse branchAncestors . NE.nonEmptySeqToSeq $ bs
+          return $ r <| ass
         Wrap c -> do
           cs <- getAncestors c
           return $ r <| cs

@@ -12,6 +12,7 @@ import Pinchot.Intervals
 
 import Control.Applicative ((<|>), liftA2)
 import Data.Foldable (toList)
+import qualified Data.Sequence.NonEmpty as NE
 import Data.Sequence ((<|), viewl, ViewL(EmptyL, (:<)), Seq)
 import qualified Data.Sequence as Seq
 import qualified Language.Haskell.TH as T
@@ -39,7 +40,7 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
                 | otherwise = Nothing
            in Text.Earley.terminal f |]
 
-  NonTerminal b1 bs -> [makeRule expression]
+  NonTerminal (NE.NonEmptySeq b1 bs) -> [makeRule expression]
     where
       expression = foldl addBranch (branchToParser prefix b1) bs
         where

@@ -13,7 +13,7 @@ import qualified Text.Show.Pretty as Pretty
 -- | Prettify a 'Seq'.
 prettySeq :: (a -> Value) -> Seq a -> Value
 prettySeq f
-  = Pretty.Con "Data.Sequence.Seq"
+  = Pretty.Con "Seq"
   . (:[])
   . Pretty.List
   . fmap f
@@ -22,5 +22,5 @@ prettySeq f
 -- | Prettify a 'NonEmptySeq'.
 prettyNonEmptySeq :: (a -> Value) -> NonEmptySeq a -> Value
 prettyNonEmptySeq f (NonEmptySeq a1 as)
-  = Pretty.Rec "Data.Sequence.NonEmpty.NonEmptySeq"
+  = Pretty.Rec "NonEmptySeq"
                [("_fore", f a1), ("_aft", prettySeq f as)]

@@ -3,6 +3,7 @@ module Pinchot.SyntaxTree.Optics where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
+import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
@@ -64,7 +65,7 @@ ruleToOptics
   -> T.Q [T.Dec]
 ruleToOptics qual termName (Rule nm _ ty) = case ty of
   Terminal ivls -> terminalToOptics qual termName nm ivls
-  NonTerminal b1 bs -> sequence $ nonTerminalToOptics qual nm b1 bs
+  NonTerminal bs -> sequence $ nonTerminalToOptics qual nm bs
   Record sq -> sequence $ recordsToOptics qual nm sq
   _ -> return []
   
@@ -114,11 +115,9 @@ nonTerminalToOptics
   -- optics
   -> String
   -- ^ Rule name
-  -> Branch t
-  -> Seq (Branch t)
+  -> NonEmptySeq (Branch t)
   -> [T.Q T.Dec]
-nonTerminalToOptics qual nm b1 bsSeq
-  = concat $ makePrism b1 : fmap makePrism bs
+nonTerminalToOptics qual nm bsSeq = concat $ fmap makePrism bs
   where
     bs = toList bsSeq
     makePrism (Branch inner rulesSeq) = [ signature, binding ]

@@ -54,9 +54,9 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
         [notStrict
           [t| ( $(charTypeVar), $(anyTypeVar) ) |] ]
 
-  NonTerminal b1 bs -> T.dataD (T.cxt []) name [charType, anyType] Nothing cons derives
+  NonTerminal bs -> T.dataD (T.cxt []) name [charType, anyType] Nothing cons derives
     where
-      cons = branchConstructor b1 : toList (fmap branchConstructor bs)
+      cons = toList (fmap branchConstructor bs)
 
   Wrap (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [charType, anyType] Nothing newtypeCon derives

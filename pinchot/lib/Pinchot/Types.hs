@@ -84,7 +84,7 @@ branches
   = Lens.lens _branches (\b s -> b { _branches = s})
 
 instance PrettyVal t => PrettyVal (Branch t) where
-  prettyVal (Branch b1 bs) = Pretty.Rec "Pinchot.Types.Branch"
+  prettyVal (Branch b1 bs) = Pretty.Rec "Branch"
     [ ("_branchName", prettyVal b1)
     , ("_branches", prettySeq prettyVal bs)
     ]
@@ -130,16 +130,14 @@ _Plus = Lens.prism' (\r -> Plus r)
 
 instance PrettyVal t => PrettyVal (RuleType t) where
   prettyVal x = case x of
-    Terminal ivl -> Pretty.Con (ty "Terminal") [(prettyVal ivl)]
-    NonTerminal ne -> Pretty.Con (ty "NonTerminal")
+    Terminal ivl -> Pretty.Con "Terminal" [(prettyVal ivl)]
+    NonTerminal ne -> Pretty.Con "NonTerminal"
       [prettyNonEmptySeq prettyVal ne]
-    Wrap r -> Pretty.Con (ty "Wrap") [prettyVal r]
-    Record rs -> Pretty.Con (ty "Record") [prettySeq prettyVal rs]
-    Opt rs -> Pretty.Con (ty "Opt") [prettyVal rs]
-    Star rs -> Pretty.Con (ty "Star") [prettyVal rs]
-    Plus rs -> Pretty.Con (ty "Plus") [prettyVal rs]
-    where
-      ty = ("Pinchot.Types." ++)
+    Wrap r -> Pretty.Con "Wrap" [prettyVal r]
+    Record rs -> Pretty.Con "Record" [prettySeq prettyVal rs]
+    Opt rs -> Pretty.Con "Opt" [prettyVal rs]
+    Star rs -> Pretty.Con "Star" [prettyVal rs]
+    Plus rs -> Pretty.Con "Plus" [prettyVal rs]
 
 -- | The name of a field in a record, without the leading
 -- underscore.

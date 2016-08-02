@@ -148,8 +148,8 @@ bimapLetBind
   -> T.Q T.DecQ
 bimapLetBind qual fa fb lkp (Rule name _ ty) = case ty of
   Terminal _ -> terminalBimapLetBind qual fa fb lkp name
-  NonTerminal b1 bs -> return $ nonTerminalBimapLetBind qual lkp name
-    (b1 : toList bs)
+  NonTerminal bs -> return $ nonTerminalBimapLetBind qual lkp name
+    (toList bs)
   Wrap (Rule inner _ _) -> wrapBimapLetBind qual lkp name inner
   Record sq -> recordBimapLetBind qual lkp name sq
   Opt (Rule inner _ _) -> optBimapLetBind qual lkp name inner

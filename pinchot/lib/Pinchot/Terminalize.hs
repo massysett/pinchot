@@ -171,16 +171,15 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
     let pat = T.conP (quald qual nm) [T.varP x]
     [| \ $(pat) -> NonEmpty.singleton $(T.varE x) |]
 
-  NonTerminal b1 bs -> do
+  NonTerminal bs -> do
     x <- T.newName "x"
     let fTzn | atLeastOne rule = terminalizeProductAtLeastOne
              | otherwise = terminalizeProductAllowsZero
         tzr (Branch name sq)
           = fmap (\(pat, expn) -> T.match pat (T.normalB expn) [])
           (fTzn qual lkp name sq)
-    m1 <- tzr b1
     ms <- traverse tzr . toList $ bs
-    T.lamE [T.varP x] (T.caseE (T.varE x) (m1 : ms))
+    T.lamE [T.varP x] (T.caseE (T.varE x) ms)
 
   Wrap (Rule inner _ _) -> do
     x <- T.newName "x"
@@ -302,7 +301,7 @@ atLeastOne
   -- symbol.
 atLeastOne (Rule _ _ ty) = case ty of
   Terminal _ -> True
-  NonTerminal b1 bs -> branchAtLeastOne b1 && all branchAtLeastOne bs
+  NonTerminal bs -> all branchAtLeastOne bs
     where
       branchAtLeastOne (Branch _ rs) = any atLeastOne rs
   Wrap r -> atLeastOne r
