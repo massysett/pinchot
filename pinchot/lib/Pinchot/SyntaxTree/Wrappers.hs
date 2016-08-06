@@ -4,10 +4,10 @@ module Pinchot.SyntaxTree.Wrappers where
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes)
 import Data.Sequence (Seq)
+import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 
-import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.Types
 
@@ -142,7 +142,7 @@ wrappedPlus
   -> T.Q T.Dec
 wrappedPlus wrappedName = makeWrapped tupName
   where
-    tupName = T.conT ''NonEmpty
+    tupName = T.conT ''NonEmptySeq
       `T.appT` ((T.conT (T.mkName wrappedName))
                   `T.appT` (T.varT (T.mkName "t"))
                   `T.appT` (T.varT (T.mkName "a")))

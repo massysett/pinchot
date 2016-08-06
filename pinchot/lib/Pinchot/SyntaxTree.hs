@@ -6,9 +6,9 @@ module Pinchot.SyntaxTree where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
+import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Language.Haskell.TH as T
 
-import Pinchot.NonEmpty
 import Pinchot.Rules
 import Pinchot.Types
 
@@ -96,7 +96,7 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
     where
       cons = T.normalC name [ne]
         where
-          ne = notStrict [t| NonEmpty $(ins) |]
+          ne = notStrict [t| NonEmptySeq $(ins) |]
             where
               ins = [t| $(T.conT (T.mkName inner))
                 $(charTypeVar) $(anyTypeVar) |]

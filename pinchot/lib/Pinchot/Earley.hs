@@ -4,7 +4,6 @@
 
 module Pinchot.Earley where
 
-import Pinchot.NonEmpty
 import Pinchot.RecursiveDo
 import Pinchot.Rules
 import Pinchot.Types
@@ -12,6 +11,7 @@ import Pinchot.Intervals
 
 import Control.Applicative ((<|>), liftA2)
 import Data.Foldable (toList)
+import Data.Sequence.NonEmpty (NonEmptySeq(NonEmptySeq))
 import qualified Data.Sequence.NonEmpty as NE
 import Data.Sequence ((<|), viewl, ViewL(EmptyL, (:<)), Seq)
 import qualified Data.Sequence as Seq
@@ -85,7 +85,7 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
               pSeq = [| (<|) <$> $(T.varE (localRuleName innerNm))
                              <*> $(T.varE helper) |]
       topExpn = [| $constructor <$>
-        ( NonEmpty <$> $(T.varE (localRuleName innerNm))
+        ( NonEmptySeq <$> $(T.varE (localRuleName innerNm))
                    <*> $(T.varE helper)) |]
 
 

@@ -4,14 +4,14 @@ module Pinchot.Terminalize where
 
 import Control.Monad (join)
 import Data.Sequence (Seq)
+import Data.Sequence.NonEmpty (NonEmptySeq)
+import qualified Data.Sequence.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import Data.Foldable (foldlM, toList)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
 
-import Pinchot.NonEmpty (NonEmpty(NonEmpty))
-import qualified Pinchot.NonEmpty as NonEmpty
 import Pinchot.Types
 import Pinchot.Rules
 
@@ -84,7 +84,7 @@ terminalizer qual rule@(Rule nm _ _) = sequence [sig, expn]
           . T.forallT [T.PlainTV (T.mkName "t")
                       , T.PlainTV (T.mkName "a")] (return [])
           $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
-            -> NonEmpty ($(charType), $(anyType)) |]
+            -> NonEmptySeq ($(charType), $(anyType)) |]
       | otherwise = T.sigD (T.mkName declName)
           . T.forallT [ T.PlainTV (T.mkName "t")
                       , T.PlainTV (T.mkName "a")] (return [])
@@ -199,13 +199,13 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
     [| \ $(pat) -> maybe Seq.empty
           $(convert (T.varE (lookupName lkp inner))) $(T.varE x) |]
     where
-      convert expn | atLeastOne r = [| NonEmpty.flatten . $(expn) |]
+      convert expn | atLeastOne r = [| NonEmpty.nonEmptySeqToSeq . $(expn) |]
                    | otherwise = expn
 
   Star r@(Rule inner _ _) -> do
     x <- T.newName "x"
     let pat = T.conP (quald qual nm) [T.varP x]
-        convert e | atLeastOne r = [| NonEmpty.flatten . $(e) |]
+        convert e | atLeastOne r = [| NonEmpty.nonEmptySeqToSeq . $(e) |]
                   | otherwise = e
     [| \ $(pat) -> join . fmap $(convert (T.varE (lookupName lkp inner)))
           $ $(T.varE x) |]
@@ -216,15 +216,16 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
         let pat = T.conP (quald qual nm) [T.varP x]
         [| \ $(pat) ->
             let getTermNonEmpty = $(T.varE (lookupName lkp inner))
-                getTerms (NonEmpty e1 es) = join . fmap getTermNonEmpty
-                  $ NonEmpty.NonEmpty e1 es
+                getTerms (NonEmpty.NonEmptySeq e1 es)
+                  = join . fmap getTermNonEmpty
+                  $ NonEmpty.NonEmptySeq e1 es
            in getTerms $(T.varE x)
           |]
 
     | otherwise -> do
         x <- T.newName "x"
         [| let getTermSeq = $(T.varE (lookupName lkp inner))
-               getTerms (NonEmpty e1 es) = getTermSeq e1
+               getTerms (NonEmpty.NonEmptySeq e1 es) = getTermSeq e1
                 `mappend` (join (fmap getTermSeq es))
            in getTerms $(T.varE x)
           |]
@@ -246,7 +247,7 @@ terminalizeProductAllowsZero qual lkp name bs = do
             f acc trip = [| $(acc) `mappend` $(procTrip trip) |]
             start = procTrip x
             procTrip (rule, (_, expn))
-              | atLeastOne rule = [| NonEmpty.flatten $(expn) |]
+              | atLeastOne rule = [| NonEmpty.nonEmptySeqToSeq $(expn) |]
               | otherwise = expn
   return (pat, body)
 
@@ -278,7 +279,7 @@ terminalizeProductAtLeastOne qual lkp name bs = do
             where
               f acc (rule, (_, expn))
                 | atLeastOne rule =
-                    [| $(acc) `mappend` NonEmpty.flatten $(expn) |]
+                    [| $(acc) `mappend` NonEmpty.nonEmptySeqToSeq $(expn) |]
                 | otherwise =
                     [| $(acc) `mappend` $(expn) |]
   return (pat, body)

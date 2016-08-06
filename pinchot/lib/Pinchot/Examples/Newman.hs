@@ -16,6 +16,8 @@ import Data.Foldable (toList)
 import Data.List (intersperse)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
+import Data.Sequence.NonEmpty (NonEmptySeq)
+import qualified Data.Sequence.NonEmpty as NE
 import qualified Text.Earley as Earley
 
 -- | Formats a 'Loc' for nice on-screen display.
@@ -37,12 +39,12 @@ labelOpt l sq
 
 -- | Labels a single field, where the field will always appear in a
 -- parsed result.
-labelNE :: String -> NonEmpty (Char, Loc) -> String
+labelNE :: String -> NonEmptySeq (Char, Loc) -> String
 labelNE l sq
   = l ++ ": " ++ show (toList . fmap fst $ sq)
   ++ " " ++ loc ++ "\n"
   where
-    loc = labelLoc . snd . _front $ sq
+    loc = labelLoc . snd . NE._fore $ sq
 
 -- | Formats a single 'Address' for nice on-screen display.
 showAddress :: Address Char Loc -> String
@@ -56,7 +58,7 @@ showAddress a = name ++ street ++ city
           . _r'Address'1'StreetLine $ a
 
         pre = labelOpt "Direction prefix"
-          . maybe Seq.empty flatten
+          . maybe Seq.empty NE.nonEmptySeqToSeq
           . Lens.preview (r'Address'1'StreetLine
                           . r'StreetLine'2'DirectionSpace'Opt
                           . Lens._Wrapped'
@@ -72,7 +74,7 @@ showAddress a = name ++ street ++ city
           $ a
 
         suf = labelOpt "Street suffix"
-          . maybe Seq.empty flatten
+          . maybe Seq.empty NE.nonEmptySeqToSeq
           . Lens.preview (r'Address'1'StreetLine
                           . r'StreetLine'4'SpaceSuffix'Opt
                           . Lens._Wrapped'
