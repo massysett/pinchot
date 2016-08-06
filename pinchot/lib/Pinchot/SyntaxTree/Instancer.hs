@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Pinchot.SyntaxTree.Instancer where
 
+import Control.Monad (replicateM)
 import qualified Data.Bifunctor as Bifunctor
 import Data.Maybe (catMaybes)
 import qualified Data.Semigroup as Semigroup
@@ -13,9 +14,12 @@ import qualified Data.Map as Map
 import Data.Semigroup ((<>))
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
+import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Language.Haskell.TH as T
+import qualified Text.Show.Pretty as Pretty
 
 import Pinchot.Types
+import Pinchot.Pretty
 import Pinchot.Rules
 
 -- | Creates an instance of 'Bifunctor.Bifunctor' for every 'Rule'
@@ -400,3 +404,168 @@ wrappedSemigroupExpression append qual rules = names >>= makeExp
           [| $(T.varE append) $(T.varE x1) $(T.varE x2) |] rules
           where
             f rule acc = T.appE (T.conE (quald qual rule)) acc
+
+-- | Creates an expression of type
+--
+-- RuleData -> Value
+prettyExpression
+  :: Qualifier
+  -> Rule t
+  -> T.ExpQ
+prettyExpression qual rule@(Rule name _ _) = do
+  lkp <- nameMap rule
+  thisRule <- lookupRule lkp name
+  let decs = map mkDec . toList . family $ rule
+        where
+          mkDec inner = do
+            innerNm <- lookupRule lkp (_ruleName inner)
+            T.valD (T.varP innerNm)
+              (T.normalB (prettyExpressionInEnv qual lkp inner)) []
+  T.letE decs (T.varE thisRule)
+
+-- | Creates a 'Pretty.PrettyVal' instance.  This must be spliced into the same
+-- module in which the corresponding data type is spliced.
+prettyInstance
+  :: Rule t
+  -> T.DecQ
+prettyInstance rule = do
+  let a = T.varT $ T.mkName "a"
+      t = T.varT $ T.mkName "t"
+      ruleTypeName = T.conT . T.mkName . _ruleName $ rule
+      cxt = [ [t| Pretty.PrettyVal $t |]
+            , [t| Pretty.PrettyVal $a |]
+            ]
+      ty = [t| Pretty.PrettyVal ( $ruleTypeName $t $a ) |]
+      dec = T.funD 'Pretty.prettyVal [clause]
+        where
+          clause = T.clause [] (T.normalB (prettyExpression "" rule)) []
+  T.instanceD (T.cxt cxt) ty [dec]
+
+-- | Creates a 'Pretty.PrettyVal' instance for a rule and all its
+-- ancestors.
+prettyInstanceFamily
+  :: Rule t
+  -> T.DecsQ
+prettyInstanceFamily
+  = fmap toList . sequence . fmap prettyInstance . family
+
+-- | Creates a 'Pretty.PrettyVal' instance for several rules and all
+-- their ancestors.
+--
+-- This function must be
+-- spliced in the same module as the module in which the syntax tree
+-- types are created.  This avoids problems with orphan instances.
+-- Since ancestors are included, you can get the entire tree of
+-- instances that you need by applying this function to a single
+-- start symbol.
+--
+-- Example: "Pinchot.Examples.SyntaxTrees".
+prettyInstances
+  :: Seq (Rule t)
+  -> T.DecsQ
+prettyInstances
+  = fmap toList . sequence . fmap prettyInstance . families
+
+-- | Creates an expression of type
+--
+-- RuleData -> Value
+prettyExpressionInEnv
+  :: Qualifier
+  -> Map RuleName T.Name
+  -- ^ All expressions
+  -> Rule t
+  -> T.ExpQ
+prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
+  Terminal _ -> do
+    x <- T.newName "x"
+    [| \ $(T.conP (quald qual name) [T.varP x])
+          -> Pretty.prettyVal $(T.varE x) |]
+  NonTerminal sq -> prettyBranches qual lkp sq
+  Wrap (Rule inner _ _) -> do
+    x <- T.newName "x"
+    fVal <- lookupRule lkp inner
+    [| \ $(T.conP (quald qual name) [T.varP x])
+         -> $(T.varE fVal) $(T.varE x) |]
+  Record rules -> do
+    (pat, expn) <- prettyConstructor qual lkp name rules
+    [| \ $pat -> $expn |]
+  Opt (Rule inner _ _) -> do
+    x <- T.newName "x"
+    fVal <- lookupRule lkp inner
+    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+      prettyMaybe $(T.varE fVal) $(T.varE x) |]
+  Star (Rule inner _ _) -> do
+    x <- T.newName "x"
+    fVal <- lookupRule lkp inner
+    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+       prettySeq $(T.varE fVal) $(T.varE x) |]
+  Plus (Rule inner _ _) -> do
+    x <- T.newName "x"
+    fVal <- lookupRule lkp inner
+    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+       prettyNonEmptySeq $(T.varE fVal) $(T.varE x) |]
+
+prettyBranches
+  :: Qualifier
+  -> Map RuleName T.Name
+  -> NonEmptySeq (Branch t)
+  -> T.ExpQ
+prettyBranches qual lkp branches = do
+  x <- T.newName "x"
+  T.lam1E (T.varP x) . T.caseE (T.varE x)
+    . fmap (prettyBranch qual lkp) . toList $ branches
+
+lookupRule
+  :: Map RuleName T.Name
+  -> RuleName
+  -> T.Q T.Name
+lookupRule mp name = case Map.lookup name mp of
+  Nothing -> fail $ "rule lookup failed: " ++ name
+  Just n -> return n
+
+-- | Creates a 'T.MatchQ' when given a value constructor name and
+-- functions that work on the field values.
+deconstruct
+  :: T.Name
+  -- ^ Name of the constructor
+  -> Int
+  -- ^ Create this many fields
+  -> ([T.ExpQ] -> T.ExpQ)
+  -- ^ Each expression that results from each field
+  -- is passed to this function.
+  -> T.Q (T.PatQ, T.ExpQ)
+deconstruct ctorName numFields getFinal = do
+  names <- replicateM numFields (T.newName "x")
+  let pat = T.conP ctorName . map T.varP $ names
+  let body = getFinal . map T.varE $ names
+  return (pat, body)
+
+prettyBranch
+  :: Qualifier
+  -> Map RuleName T.Name
+  -> Branch t
+  -> T.MatchQ
+prettyBranch qual lkp (Branch branchName branches)
+  = prettyConstructor qual lkp branchName branches >>= getMatch
+  where
+    getMatch (pat, expn) = T.match pat (T.normalB expn) []
+
+prettyConstructor
+  :: Qualifier
+  -> Map RuleName T.Name
+  -> String
+  -- ^ Name of branch, or name of data constructor
+  -> Seq (Rule t)
+  -> T.Q (T.PatQ, T.ExpQ)
+prettyConstructor qual lkp branchName branches
+  = deconstruct (quald qual branchName) (length fieldNames)
+      getFinal
+  where
+    fieldNames = toList . fmap _ruleName $ branches
+    getFinal fields = [| Pretty.Con branchName $(values) |]
+      where
+        values = T.listE $ zipWith getField fields fieldNames
+          where
+            getField field fieldName = do
+              rule <- lookupRule lkp fieldName
+              [| $(T.varE rule) $(field) |]

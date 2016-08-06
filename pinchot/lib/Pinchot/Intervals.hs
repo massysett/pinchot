@@ -17,7 +17,7 @@ import Data.Sequence (Seq, ViewL(EmptyL, (:<)), viewl, (<|))
 import qualified Data.Sequence as Seq
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
-import Text.Show.Pretty (PrettyVal, Value)
+import Text.Show.Pretty (PrettyVal)
 import qualified Text.Show.Pretty as Pretty
 
 import Pinchot.Pretty

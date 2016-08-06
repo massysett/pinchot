@@ -88,6 +88,7 @@ module Pinchot
   , bifunctorInstances
   , semigroupInstances
   , monoidInstances
+  , prettyInstances
   , rulesToOptics
 
   -- * Creating Earley grammars

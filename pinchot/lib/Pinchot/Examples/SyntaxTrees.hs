@@ -33,3 +33,6 @@ $(semigroupInstances [rAddress])
 
 -- This generates instances of the Monoid typeclass.
 $(monoidInstances [rAddress])
+
+-- This generates instances of the 'Pretty.PrettyVal' typeclass.
+$(prettyInstances [rAddress])
