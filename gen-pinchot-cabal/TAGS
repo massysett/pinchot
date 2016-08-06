@@ -1,23 +1,0 @@
-
-./gen-pinchot-cabal.hs,468
-module Main Main0,1
-version version4,5
-version version5,6
-properties properties7,8
-properties properties8,9
-ghcOptions ghcOptions34,35
-ghcOptions ghcOptions35,36
-commonOptions commonOptions39,40
-commonOptionscommonOptions40,41
-libraryDepends libraryDepends47,48
-libraryDepends libraryDepends48,49
-library library65,66
-github github70,71
-github github71,72
-newman newman79,80
-sections sections98,99
-main main103,104
-main main104,105
-
-./Setup.hs,15
-main main1,2

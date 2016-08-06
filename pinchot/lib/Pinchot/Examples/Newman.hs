@@ -5,6 +5,7 @@
 module Pinchot.Examples.Newman where
 
 import Pinchot
+import Pinchot.Pretty
 
 import Pinchot.Examples.Earley
 import Pinchot.Examples.SyntaxTrees
@@ -19,6 +20,7 @@ import qualified Data.Sequence as Seq
 import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Data.Sequence.NonEmpty as NE
 import qualified Text.Earley as Earley
+import qualified Text.Show.Pretty as Pretty
 
 -- | Formats a 'Loc' for nice on-screen display.
 labelLoc :: Loc -> String
@@ -121,12 +123,15 @@ showParseResult (addresses, report) = addresses' ++ "\n" ++ report'
 address :: String -> IO ()
 address = putStrLn . showParseResult . locatedFullParses addressGrammar
 
+-- | Like 'address' but uses 'Pretty.valToStr'.
+addressPretty :: String -> IO ()
+addressPretty = putStrLn . Pretty.valToStr
+  . prettyFullParses . locatedFullParses addressGrammar
+
 -- | Read an address from a file and print the resulting report.
 -- Good for use in GHCi.
 addressFromFile
   :: String
   -- ^ Filename
   -> IO ()
-addressFromFile fn = do
-  str <- readFile fn
-  putStrLn . showParseResult . locatedFullParses addressGrammar $ str
+addressFromFile fn = readFile fn >>= address

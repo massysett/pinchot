@@ -71,20 +71,22 @@ library libModules
 github :: Cartel.Section
 github = Cartel.githubHead "massysett" "pinchot"
 
-newman
+executable
   :: Cartel.FlagName
   -- ^ executables flag
   -> [Cartel.NonEmptyString]
   -- ^ Library modules
+  -> String
+  -- ^ Name of program
   -> Cartel.Section
-newman flag mods = Cartel.executable "newman" [block]
+executable flag mods progName = Cartel.executable "progName" [block]
   where
     block = Cartel.condBlock (Cartel.invert $ Cartel.flag flag)
       (Cartel.buildable False, []) fields
       where
         fields =
           [ Cartel.buildable True
-          , Cartel.mainIs "newman.hs"
+          , Cartel.mainIs (progName ++ ".hs")
           , Cartel.hsSourceDirs ["exe"]
           , Cartel.buildDepends libraryDepends
           , Cartel.otherModules mods
@@ -98,7 +100,8 @@ sections
   -> [Cartel.Section]
 sections exeFlag libMods =
   [ github
-  , newman exeFlag libMods
+  , executable exeFlag libMods "newman"
+  , executable exeFlag libMods "newmanPretty"
   ]
 
 main :: IO ()
