@@ -79,14 +79,16 @@ executable
   -> String
   -- ^ Name of program
   -> Cartel.Section
-executable flag mods progName = Cartel.executable progName [block]
+executable flag mods progName = Cartel.executable progName
+  [ block
+  , Cartel.mainIs (progName ++ ".hs")
+  ]
   where
     block = Cartel.condBlock (Cartel.invert $ Cartel.flag flag)
       (Cartel.buildable False, []) fields
       where
         fields =
           [ Cartel.buildable True
-          , Cartel.mainIs (progName ++ ".hs")
           , Cartel.hsSourceDirs ["exe"]
           , Cartel.buildDepends libraryDepends
           , Cartel.otherModules mods
