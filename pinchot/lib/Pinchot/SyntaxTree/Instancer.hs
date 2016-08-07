@@ -449,8 +449,9 @@ prettyInstanceFamily
 prettyInstanceFamily
   = fmap toList . sequence . fmap prettyInstance . family
 
--- | Creates a 'Pretty.PrettyVal' instance for several rules and all
--- their ancestors.
+-- | Creates a 'Pretty.PrettyVal' instance for each 'Rule' in the
+-- 'Seq', as well as for all the ancestors of each 'Rule' in the
+-- 'Seq'.
 --
 -- This function must be
 -- spliced in the same module as the module in which the syntax tree

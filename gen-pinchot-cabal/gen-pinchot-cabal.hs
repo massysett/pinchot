@@ -79,7 +79,7 @@ executable
   -> String
   -- ^ Name of program
   -> Cartel.Section
-executable flag mods progName = Cartel.executable "progName" [block]
+executable flag mods progName = Cartel.executable progName [block]
   where
     block = Cartel.condBlock (Cartel.invert $ Cartel.flag flag)
       (Cartel.buildable False, []) fields

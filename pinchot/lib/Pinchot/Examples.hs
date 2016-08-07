@@ -24,5 +24,13 @@
 -- compile the Pinchot package using the @executables@ flag, you
 -- will get an executable named @newman@ that you can play with from
 -- the command line.
+--
+-- Similar to the 'Pinchot.Examples.Newman.address' is
+-- 'Pinchot.Examples.Newman.addressPretty'; the difference is that
+-- 'Pinchot.Examples.Newman.addressPretty' uses the pretty printer
+-- from the @pretty-show@ package, while
+-- 'Pinchot.Examples.Newman.address' uses a hand-written
+-- pretty printer.  The @newmanPretty@ address uses
+-- 'Pinchot.Examples.Newman.addressPretty'.
 
 module Pinchot.Examples where
