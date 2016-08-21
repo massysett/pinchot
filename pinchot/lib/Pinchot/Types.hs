@@ -98,35 +98,40 @@ data RuleType t
   | Opt (Rule t)
   | Star (Rule t)
   | Plus (Rule t)
+  | Series (NonEmptySeq t)
   deriving (Eq, Ord, Show, Data)
 
 _Terminal :: Lens.Prism' (RuleType t) (Intervals t)
-_Terminal = Lens.prism' (\i -> Terminal i)
+_Terminal = Lens.prism' Terminal
   (\r -> case r of { Terminal i -> Just i; _ -> Nothing })
 
 _NonTerminal :: Lens.Prism' (RuleType t) (NonEmptySeq (Branch t))
-_NonTerminal = Lens.prism' (\b -> NonTerminal b)
+_NonTerminal = Lens.prism' NonTerminal
   (\r -> case r of { NonTerminal b -> Just b; _ -> Nothing })
 
 _Wrap :: Lens.Prism' (RuleType t) (Rule t)
-_Wrap = Lens.prism' (\r -> Wrap r)
+_Wrap = Lens.prism' Wrap
   (\r -> case r of { Wrap x -> Just x; _ -> Nothing })
 
 _Record :: Lens.Prism' (RuleType t) (Seq (Rule t))
-_Record = Lens.prism' (\r -> Record r)
+_Record = Lens.prism' Record
   (\r -> case r of { Record x -> Just x; _ -> Nothing })
 
 _Opt :: Lens.Prism' (RuleType t) (Rule t)
-_Opt = Lens.prism' (\r -> Opt r)
+_Opt = Lens.prism' Opt
   (\r -> case r of { Opt x -> Just x; _ -> Nothing })
 
 _Star :: Lens.Prism' (RuleType t) (Rule t)
-_Star = Lens.prism' (\r -> Star r)
+_Star = Lens.prism' Star
   (\r -> case r of { Star x -> Just x; _ -> Nothing })
 
 _Plus :: Lens.Prism' (RuleType t) (Rule t)
-_Plus = Lens.prism' (\r -> Plus r)
+_Plus = Lens.prism' Plus
   (\r -> case r of { Plus x -> Just x; _ -> Nothing })
+
+_Series :: Lens.Prism' (RuleType t) (NonEmptySeq t)
+_Series = Lens.prism' Series
+  (\r -> case r of { Series s -> Just s; _ -> Nothing })
 
 instance PrettyVal t => PrettyVal (RuleType t) where
   prettyVal x = case x of
@@ -138,6 +143,7 @@ instance PrettyVal t => PrettyVal (RuleType t) where
     Opt rs -> Pretty.Con "Opt" [prettyVal rs]
     Star rs -> Pretty.Con "Star" [prettyVal rs]
     Plus rs -> Pretty.Con "Plus" [prettyVal rs]
+    Series sq -> Pretty.Con "Series" [prettyNonEmptySeq prettyVal sq]
 
 -- | The name of a field in a record, without the leading
 -- underscore.

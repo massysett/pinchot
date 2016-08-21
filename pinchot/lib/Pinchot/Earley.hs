@@ -10,6 +10,7 @@ import Pinchot.Types
 import Pinchot.Intervals
 
 import Control.Applicative ((<|>), liftA2)
+import Data.Data (Data)
 import Data.Foldable (toList)
 import Data.Sequence.NonEmpty (NonEmptySeq(NonEmptySeq))
 import qualified Data.Sequence.NonEmpty as NE
@@ -19,12 +20,22 @@ import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 import qualified Text.Earley
 
+earleyTerm
+  :: Eq t
+  => NonEmptySeq t
+  -> Text.Earley.Prod r e (t, a) (NonEmptySeq (t, a))
+earleyTerm sq = NonEmptySeq <$> parseHead <*> parseRest
+  where
+    parseHead = parse . NE._fore $ sq
+    parseRest = foldr (liftA2 (<|) . parse) (pure Seq.empty) (NE._aft sq)
+    parse t = Text.Earley.satisfy ((== t) . fst)
+
 -- | Creates a list of pairs.  Each list represents a statement in
 -- @do@ notation.  The first element of the pair is the name of the
 -- variable to which to bind the result of the expression, which is
 -- the second element of the pair.
 ruleToParser
-  :: Syntax.Lift t
+  :: (Syntax.Lift t, Data t)
   => String
   -- ^ Module prefix
   -> Rule t
@@ -88,6 +99,11 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
         ( NonEmptySeq <$> $(T.varE (localRuleName innerNm))
                    <*> $(T.varE helper)) |]
 
+  Series neSeq -> [makeRule expression]
+    where
+      expression = [| fmap $constructor $
+        earleyTerm $(Syntax.liftData neSeq) |]
+
 
   where
     makeRule expression = (localRuleName nm,
@@ -130,7 +146,7 @@ branchToParser prefix (Branch name rules) = case viewl rules of
 --
 -- Example:  'Pinchot.Examples.Earley.addressGrammar'.
 earleyGrammarFromRule
-  :: Syntax.Lift t
+  :: (Data t, Syntax.Lift t)
   => Qualifier
   -- ^ Module prefix holding the data types created with
   -- 'Pinchot.syntaxTrees'
@@ -204,7 +220,7 @@ allRulesRecord prefix ruleSeq
 -- 'Text.Earley.Prod' for every given 'Rule' and its ancestors.
 -- Example: 'Pinchot.Examples.Earley.addressAllProductions'.
 earleyProduct
-  :: Syntax.Lift t
+  :: (Data t, Syntax.Lift t)
 
   => Qualifier
   -- ^ Qualifier for data types corresponding to those created from

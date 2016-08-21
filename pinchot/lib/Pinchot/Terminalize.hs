@@ -230,6 +230,11 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
            in getTerms $(T.varE x)
           |]
 
+  Series _ -> do
+    x <- T.newName "x"
+    let pat = T.conP (quald qual nm) [T.varP x]
+    [| \ $(pat) -> $(T.varE x) |]
+
 terminalizeProductAllowsZero
   :: Qualifier
   -> Map RuleName T.Name
@@ -310,4 +315,5 @@ atLeastOne (Rule _ _ ty) = case ty of
   Opt _ -> False
   Star _ -> False
   Plus r -> atLeastOne r
+  Series _ -> True
 

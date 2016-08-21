@@ -29,24 +29,24 @@ rEast = terminal "East" (solo 'E')
 
 rWest = terminal "West" (solo 'W')
 
-rNE = terminals "NE" "NE"
+rNE = series "NE" "NE"
 
-rNW = terminals "NW" "NW"
+rNW = series "NW" "NW"
 
-rSW = terminals "SW" "SW"
+rSW = series "SW" "SW"
 
-rSE = terminals "SE" "SE"
+rSE = series "SE" "SE"
 
 rDirection = union "Direction"
   [rNorth, rSouth, rEast, rWest, rNE, rNW, rSE, rSW]
 
-rStreet = terminals "Street" "St"
+rStreet = series "Street" "St"
 
-rAvenue = terminals "Avenue" "Ave"
+rAvenue = series "Avenue" "Ave"
 
-rWay = terminals "Way" "Way"
+rWay = series "Way" "Way"
 
-rBoulevard = terminals "Boulevard" "Blvd"
+rBoulevard = series "Boulevard" "Blvd"
 
 rSuffix = union "Suffix" [rStreet, rAvenue, rWay, rBoulevard]
 

@@ -101,6 +101,12 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
               ins = [t| $(T.conT (T.mkName inner))
                 $(charTypeVar) $(anyTypeVar) |]
 
+  Series _ ->
+    T.newtypeD (T.cxt []) name [charType, anyType] Nothing cons derives
+    where
+      cons = T.normalC name [sq]
+      sq = notStrict [t| NonEmptySeq ( $(charTypeVar), $(anyTypeVar) ) |]
+
   where
     name = T.mkName nm
     anyType = T.PlainTV (T.mkName "a")

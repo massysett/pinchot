@@ -159,6 +159,7 @@ bimapLetBind qual fa fb lkp (Rule name _ ty) = case ty of
   Opt (Rule inner _ _) -> optBimapLetBind qual lkp name inner
   Star (Rule inner _ _) -> starBimapLetBind qual lkp name inner
   Plus (Rule inner _ _) -> plusBimapLetBind qual lkp name inner
+  Series _ -> seriesBimapLetBind qual fa fb lkp name
 
 
 terminalBimapLetBind
@@ -286,6 +287,20 @@ plusBimapLetBind qual lkp name inner = do
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
 
+seriesBimapLetBind
+  :: Qualifier
+  -> T.Name
+  -> T.Name
+  -> Map RuleName T.Name
+  -> RuleName
+  -> T.Q T.DecQ
+seriesBimapLetBind qual fa fb lkp name = do
+  val <- T.newName $ "termBimapLetBind" ++ name
+  let body = T.lamE [T.conP (quald qual name) [T.varP val]]
+        [| $(T.conE (quald qual name))
+              (fmap ( Bifunctor.bimap $(T.varE fa) $(T.varE fb) )
+                    $(T.varE val) ) |]
+  return $ T.valD (T.varP (errLookup name lkp)) (T.normalB body) []
 
 errLookup
   :: (Ord a, Show a)
@@ -480,13 +495,13 @@ prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
   Terminal _ -> do
     x <- T.newName "x"
     [| \ $(T.conP (quald qual name) [T.varP x])
-          -> Pretty.prettyVal $(T.varE x) |]
+          -> Pretty.Con name [Pretty.prettyVal $(T.varE x)] |]
   NonTerminal sq -> prettyBranches qual lkp sq
   Wrap (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x])
-         -> $(T.varE fVal) $(T.varE x) |]
+         -> Pretty.Con name [$(T.varE fVal) $(T.varE x)] |]
   Record rules -> do
     (pat, expn) <- prettyConstructor qual lkp name rules
     [| \ $pat -> $expn |]
@@ -494,17 +509,22 @@ prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x]) ->
-      prettyMaybe $(T.varE fVal) $(T.varE x) |]
+      Pretty.Con name [prettyMaybe $(T.varE fVal) $(T.varE x)] |]
   Star (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x]) ->
-       prettySeq $(T.varE fVal) $(T.varE x) |]
+       Pretty.Con name [prettySeq $(T.varE fVal) $(T.varE x)] |]
   Plus (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x]) ->
-       prettyNonEmptySeq $(T.varE fVal) $(T.varE x) |]
+       Pretty.Con name [prettyNonEmptySeq $(T.varE fVal) $(T.varE x)] |]
+  Series _ -> do
+    x <- T.newName "x"
+    [| \ $(T.conP (quald qual name) [T.varP x])
+         -> Pretty.Con name
+            [prettyNonEmptySeq Pretty.prettyVal $(T.varE x)] |]
 
 prettyBranches
   :: Qualifier

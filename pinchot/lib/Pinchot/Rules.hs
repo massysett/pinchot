@@ -79,27 +79,26 @@ union n rs = nonTerminal n (fmap f rs)
       = (n ++ '\'' : branchName, Seq.singleton rule)
 
 -- | Creates a production for a sequence of terminals.  Useful for
--- parsing specific words.  Ultimately this is simply a function
--- that creates a 'Rule' using the 'record' function.
---
--- In @terminals n s@, For each 'Char' in the 'String', a 'Rule' is
--- created whose 'RuleName' is @n@ followed by an apostrophe
--- followed by the index of the position of the 'Char'.
+-- parsing specific words.  When used with 'Pinchot.syntaxTrees', the
+-- resulting data type is a @newtype@ that wraps a @'NE.NonEmptySeq'
+-- (t, a)@, where @t@ is the type of the token (often 'Char') and @a@
+-- is an arbitrary metadata type.
 --
 -- Examples: 'Pinchot.Examples.Postal.rBoulevard'.
 
-terminals
+series
   :: RuleName
   -- ^ Will be used for the name of the resulting type, and for the
   -- name of the sole data constructor
-  -> String
-  -> Rule Char
-terminals n s = record n rules
+  -> [t]
+  -- ^ The list of tokens to use.  This must have at least one item;
+  -- otherwise this function will apply 'error'.  This list must be
+  -- finite.
+  -> Rule t
+series n = rule n . Series . get . NE.seqToNonEmptySeq . Seq.fromList
   where
-    rules = Seq.fromList . zipWith mkRule [(0 :: Int) ..] $ s
-    mkRule idx char = terminal nm (solo char)
-      where
-        nm = n ++ ('\'' : show idx)
+    get Nothing = error $ "term function used with empty list for rule: " ++ n
+    get (Just a) = a
 
 -- | Creates a newtype wrapper.  Example:
 -- 'Pinchot.Examples.Postal.rCity'.
@@ -116,7 +115,7 @@ wrap n r = rule n (Wrap r)
 -- | Creates a new non-terminal production rule with only one
 -- alternative where each field has a record name.  The name of each
 -- record is:
---
+-- 
 -- @_r\'RULE_NAME\'INDEX\'FIELD_TYPE@
 --
 -- where @RULE_NAME@ is the name of this rule, @INDEX@ is the index number
@@ -198,6 +197,7 @@ getAncestors r@(Rule name _ ty) = do
         Plus c -> do
           cs <- getAncestors c
           return $ r <| cs
+        Series _ -> return (Seq.singleton r)
   where
     branchAncestors (Branch _ rs) = fmap join . traverse getAncestors $ rs
 

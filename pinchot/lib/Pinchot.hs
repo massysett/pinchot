@@ -54,7 +54,7 @@ module Pinchot
   , terminal
   , nonTerminal
   , union
-  , terminals
+  , series
   , wrap
   , record
   , opt
