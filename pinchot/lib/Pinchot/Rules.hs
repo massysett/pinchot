@@ -31,7 +31,7 @@ rule n = Rule n Nothing
 -- 'Pinchot.Examples.Postal.rLetter'.
 terminal
   :: RuleName
-  -> T.TExp (t -> Bool)
+  -> T.Q (T.TExp (t -> Bool))
   -- ^ Valid terminal symbols
   -> Rule t
 terminal n i = rule n (Terminal (Predicate i))
@@ -87,12 +87,12 @@ series
   :: RuleName
   -- ^ Will be used for the name of the resulting type, and for the
   -- name of the sole data constructor
-  -> [T.TExp (t -> Bool)]
+  -> [t]
   -- ^ The list of tokens to use.  This must have at least one item;
   -- otherwise this function will apply 'error'.  This list must be
   -- finite.
   -> Rule t
-series n = rule n . Series . fmap Predicate . get . NE.nonEmpty
+series n = rule n . Series . get . NE.nonEmpty
   where
     get Nothing = error $ "term function used with empty list for rule: " ++ n
     get (Just a) = a

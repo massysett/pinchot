@@ -6,9 +6,7 @@ module Pinchot.Locator where
 
 import Pinchot.Types
 
-import qualified Data.ListLike as ListLike
-import Data.Sequence (Seq, (|>))
-import qualified Data.Sequence as Seq
+import Data.List (mapAccumL)
 import qualified Text.Earley as Earley
 
 -- | Advances the location for 'Char' values.  Tabs advance to the
@@ -24,33 +22,24 @@ advanceChar c (Loc !lin !col !pos)
 -- | Takes any ListLike value based on 'Char' (@Seq@, @Text@,
 -- @String@, etc.) and creates a 'Seq' which pairs each 'Char' with
 -- its location.  Example: 'locatedFullParses'.
-locations
-  :: ListLike.FoldableLL full Char
-  => full
-  -> Seq (Char, Loc)
-locations = fst . ListLike.foldl' f (Seq.empty, Loc 1 1 1)
+locations :: Traversable t => t Char -> t (Char, Loc)
+locations = snd . mapAccumL f (Loc 1 1 1)
   where
-    f (!sq, !loc) c = (sq |> (c, loc), advanceChar c loc)
+    f loc char = (advanceChar char loc, (char, loc))
 
--- | Breaks a ListLike into a 'Seq' but does not assign locations.
-noLocations
-  :: ListLike.FoldableLL full item
-  => full
-  -> Seq (item, ())
-noLocations = ListLike.foldl' f Seq.empty
-  where
-    f !sq c = sq |> (c, ())
+-- | Takes a list of tokens and assigns empty locations.
+noLocations :: Functor f => f a -> f (a, ())
+noLocations = fmap (\a -> (a, ()))
 
 -- | Obtains all full Earley parses from a given input string, after
 -- assigning a location to every 'Char'.  Example:
 -- 'Pinchot.Examples.Newman.address'.
 locatedFullParses
-  :: ListLike.FoldableLL full Char
-  => (forall r. Earley.Grammar r (Earley.Prod r String (Char, Loc) (p Char Loc)))
+  :: (forall r. Earley.Grammar r (Earley.Prod r String (Char, Loc) (p Char Loc)))
   -- ^ Earley grammar with production that you want to parse.
-  -> full
+  -> [Char]
   -- ^ Source text, e.g. 'String', 'Data.Text', etc.
-  -> ([p Char Loc], Earley.Report String (Seq (Char, Loc)))
+  -> ([p Char Loc], Earley.Report String [(Char, Loc)])
   -- ^ A list of successful parses that when to the end of the
   -- source string, along with the Earley report showing possible
   -- errors.

@@ -56,7 +56,6 @@ libraryDepends =
   , Cartel.atLeast "lens" [4,13]
   , Cartel.atLeast "ListLike" [4,2,1]
   , Cartel.atLeast "semigroups" [0,18,1]
-  , Cartel.atLeast "non-empty-sequence" [0,2]
   ]
 
 library

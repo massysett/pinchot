@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 -- | This module contains a context-free grammar for U.S. postal
@@ -12,22 +13,23 @@
 module Pinchot.Examples.Postal where
 
 import Pinchot
-import Data.Monoid ((<>))
 
-rDigit = terminal "Digit" (include '0' '9') <?> "digit from 0 to 9"
+rDigit = terminal "Digit" [|| \x -> x >= '0' && x <= '9' ||]
+  <?> "digit from 0 to 9"
 
 rDigits = plus rDigit
 
-rLetter = terminal "Letter" (include 'a' 'z' <> include 'A' 'Z')
+rLetter = terminal "Letter" [|| \x -> (x >= 'a' && x <= 'z')
+                                   || (x >= 'A' && x <= 'Z') ||]
   <?> "letter from A to Z"
 
-rNorth = terminal "North" (solo 'N')
+rNorth = terminal "North" [|| (== 'N') ||]
 
-rSouth = terminal "South" (solo 'S')
+rSouth = terminal "South" [|| (== 'S') ||]
 
-rEast = terminal "East" (solo 'E')
+rEast = terminal "East" [|| (== 'E') ||]
 
-rWest = terminal "West" (solo 'W')
+rWest = terminal "West" [|| (== 'W') ||]
 
 rNE = series "NE" "NE"
 
@@ -50,11 +52,11 @@ rBoulevard = series "Boulevard" "Blvd"
 
 rSuffix = union "Suffix" [rStreet, rAvenue, rWay, rBoulevard]
 
-rSpace = terminal "Space" (solo ' ')
+rSpace = terminal "Space" [|| (== ' ') ||]
 
-rComma = terminal "Comma" (solo ',')
+rComma = terminal "Comma" [|| (== ',') ||]
 
-rNewline = terminal "Newline" (solo '\n')
+rNewline = terminal "Newline" [|| (== '\n') ||]
 
 rCommaSpace = record "CommaSpace" [rComma, rSpace]
 

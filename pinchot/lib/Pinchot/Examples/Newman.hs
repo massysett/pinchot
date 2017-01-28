@@ -13,12 +13,9 @@ import Pinchot.Examples.Terminalize
 import Pinchot.Examples.RulesToOptics
 
 import qualified Control.Lens as Lens
-import Data.Foldable (toList)
 import Data.List (intersperse)
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import Data.Sequence.NonEmpty (NonEmptySeq)
-import qualified Data.Sequence.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty, toList)
+import qualified Data.List.NonEmpty as NE
 import qualified Text.Earley as Earley
 import qualified Text.Show.Pretty as Pretty
 
@@ -30,9 +27,9 @@ labelLoc (Loc l c p)
 
 -- | Labels a single field, where the field may or may not appear in
 -- a parsed result.
-labelOpt :: String -> Seq (Char, Loc) -> String
+labelOpt :: String -> [(Char, Loc)] -> String
 labelOpt l sq
-  = l ++ ": " ++ show (toList . fmap fst $ sq)
+  = l ++ ": " ++ show (fmap fst $ sq)
   ++ " " ++ loc ++ "\n"
   where
     loc = case Lens.uncons sq of
@@ -41,12 +38,12 @@ labelOpt l sq
 
 -- | Labels a single field, where the field will always appear in a
 -- parsed result.
-labelNE :: String -> NonEmptySeq (Char, Loc) -> String
+labelNE :: String -> NonEmpty (Char, Loc) -> String
 labelNE l sq
   = l ++ ": " ++ show (toList . fmap fst $ sq)
   ++ " " ++ loc ++ "\n"
   where
-    loc = labelLoc . snd . NE._fore $ sq
+    loc = labelLoc . snd . NE.head $ sq
 
 -- | Formats a single 'Address' for nice on-screen display.
 showAddress :: Address Char Loc -> String
@@ -60,7 +57,7 @@ showAddress a = name ++ street ++ city
           . _r'Address'1'StreetLine $ a
 
         pre = labelOpt "Direction prefix"
-          . maybe Seq.empty NE.nonEmptySeqToSeq
+          . maybe [] NE.toList
           . Lens.preview (r'Address'1'StreetLine
                           . r'StreetLine'2'DirectionSpace'Opt
                           . Lens._Wrapped'
@@ -76,7 +73,7 @@ showAddress a = name ++ street ++ city
           $ a
 
         suf = labelOpt "Street suffix"
-          . maybe Seq.empty NE.nonEmptySeqToSeq
+          . maybe [] NE.toList
           . Lens.preview (r'Address'1'StreetLine
                           . r'StreetLine'4'SpaceSuffix'Opt
                           . Lens._Wrapped'
@@ -107,7 +104,7 @@ showAddress a = name ++ street ++ city
 -- | Formats successful 'Address' parses and the 'Earley.Report' for
 -- nice on-screen display.
 showParseResult
-  :: ([Address Char Loc], Earley.Report String (Seq (Char, Loc)))
+  :: ([Address Char Loc], Earley.Report String [(Char, Loc)])
   -> String
 showParseResult (addresses, report) = addresses' ++ "\n" ++ report'
   where
@@ -115,7 +112,7 @@ showParseResult (addresses, report) = addresses' ++ "\n" ++ report'
       . concat . intersperse "---\n" . map showAddress
       $ addresses
     report' = ("Earley report:\n\n" ++) . show
-      $ report { Earley.unconsumed = toList . fmap fst
+      $ report { Earley.unconsumed = fmap fst
       . Earley.unconsumed $ report }
 
 -- | Parse an address and print the resulting report.  Good for use

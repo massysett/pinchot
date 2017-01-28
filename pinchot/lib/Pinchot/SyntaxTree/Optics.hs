@@ -2,15 +2,13 @@
 module Pinchot.SyntaxTree.Optics where
 
 import Data.Foldable (toList)
-import Data.Sequence (Seq)
-import Data.Sequence.NonEmpty (NonEmptySeq)
+import Data.List.NonEmpty (NonEmpty)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 
 import Pinchot.Rules
 import Pinchot.Types
-import Pinchot.Intervals
 
 -- | Creates optics declarations for a 'Rule', if optics can
 -- be made for the 'Rule':
@@ -35,7 +33,7 @@ rulesToOptics
   -- optics
   -> T.Name
   -- ^ Type name for the terminal
-  -> Seq (Rule t)
+  -> [Rule t]
   -> T.Q [T.Dec]
 rulesToOptics qual termName
   = fmap concat
@@ -64,7 +62,7 @@ ruleToOptics
   -> Rule t
   -> T.Q [T.Dec]
 ruleToOptics qual termName (Rule nm _ ty) = case ty of
-  Terminal ivls -> terminalToOptics qual termName nm ivls
+  Terminal pdct -> terminalToOptics qual termName nm pdct
   NonTerminal bs -> sequence $ nonTerminalToOptics qual nm bs
   Record sq -> sequence $ recordsToOptics qual nm sq
   _ -> return []
@@ -84,9 +82,9 @@ terminalToOptics
   -- ^ Terminal type name
   -> String
   -- ^ Rule name
-  -> Intervals t
+  -> Predicate t
   -> T.Q [T.Dec]
-terminalToOptics qual termName nm ivls = do
+terminalToOptics qual termName nm (Predicate pdct) = do
   e1 <- T.sigD (T.mkName ('_':nm))
     $ T.forallT [ T.PlainTV (T.mkName "a")] (return [])
     [t| Lens.Prism' ( $(T.conT termName), $(anyType) )
@@ -103,9 +101,9 @@ terminalToOptics qual termName nm ivls = do
     ctor = T.conE (quald qual nm)
     expn = [| let fetch $fetchPat = $fetchName
                   store (term, a)
-                    | inIntervals ivls term = Just ($(ctor) (term, a))
-                    | otherwise = Nothing
-              in Lens.prism' fetch store
+                     | $(fmap T.unType pdct) term = Just ($(ctor) (term, a))
+                     | otherwise = Nothing
+               in Lens.prism' fetch store
            |]
 
 -- | Creates prisms for each 'Branch'.
@@ -115,7 +113,7 @@ nonTerminalToOptics
   -- optics
   -> String
   -- ^ Rule name
-  -> NonEmptySeq (Branch t)
+  -> NonEmpty (Branch t)
   -> [T.Q T.Dec]
 nonTerminalToOptics qual nm bsSeq = concat $ fmap makePrism bs
   where
@@ -201,7 +199,7 @@ recordsToOptics
   -- optics
   -> String
   -- ^ Rule name
-  -> Seq (Rule t)
+  -> [Rule t]
   -> [T.Q T.Dec]
 recordsToOptics qual nm
   = concat . zipWith makeLens [(0 :: Int) ..] . toList

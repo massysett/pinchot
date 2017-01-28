@@ -40,15 +40,9 @@ Gifford Pinchot, first chief of the United States Forest Service.
 
 -}
 module Pinchot
-  ( -- * Intervals
-    Intervals
-  , include
-  , exclude
-  , solo
-  , pariah
-
+  (
   -- * Production rules
-  , RuleName
+    RuleName
   , Rule
   , BranchName
   , terminal
@@ -102,7 +96,6 @@ module Pinchot
 
 import Pinchot.Earley
 import Pinchot.Locator
-import Pinchot.Intervals
 import Pinchot.Rules
 import Pinchot.SyntaxTree
 import Pinchot.SyntaxTree.Instancer

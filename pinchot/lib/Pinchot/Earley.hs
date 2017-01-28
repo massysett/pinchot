@@ -7,27 +7,23 @@ module Pinchot.Earley where
 import Pinchot.RecursiveDo
 import Pinchot.Rules
 import Pinchot.Types
-import Pinchot.Intervals
 
 import Control.Applicative ((<|>), liftA2)
 import Data.Data (Data)
 import Data.Foldable (toList)
-import Data.Sequence.NonEmpty (NonEmptySeq(NonEmptySeq))
-import qualified Data.Sequence.NonEmpty as NE
-import Data.Sequence ((<|), viewl, ViewL(EmptyL, (:<)), Seq)
-import qualified Data.Sequence as Seq
+import Data.List.NonEmpty (NonEmpty((:|)))
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 import qualified Text.Earley
 
 earleyTerm
   :: Eq t
-  => NonEmptySeq t
-  -> Text.Earley.Prod r e (t, a) (NonEmptySeq (t, a))
-earleyTerm sq = NonEmptySeq <$> parseHead <*> parseRest
+  => NonEmpty t
+  -> Text.Earley.Prod r e (t, a) (NonEmpty (t, a))
+earleyTerm (fore :| aft) = (:|) <$> parseHead <*> parseRest
   where
-    parseHead = parse . NE._fore $ sq
-    parseRest = foldr (liftA2 (<|) . parse) (pure Seq.empty) (NE._aft sq)
+    parseHead = parse fore
+    parseRest = foldr (liftA2 (:) . parse) (pure []) aft
     parse t = Text.Earley.satisfy ((== t) . fst)
 
 -- | Creates a list of pairs.  Each list represents a statement in
@@ -42,16 +38,16 @@ ruleToParser
   -> [(T.Name, T.ExpQ)]
 ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
-  Terminal ivls -> [makeRule expression]
+  Terminal (Predicate pdct) -> [makeRule expression]
     where
       expression =
         [| let f (c, a)
-                | inIntervals ivls c = Just
+                | $(fmap T.unType pdct) c = Just
                     ($(T.conE (quald prefix nm)) (c, a))
                 | otherwise = Nothing
            in Text.Earley.terminal f |]
 
-  NonTerminal (NE.NonEmptySeq b1 bs) -> [makeRule expression]
+  NonTerminal (b1 :| bs) -> [makeRule expression]
     where
       expression = foldl addBranch (branchToParser prefix b1) bs
         where
@@ -64,9 +60,9 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
 
   Record sq -> [makeRule expression]
     where
-      expression = case viewl sq of
-        EmptyL -> [| pure $constructor |]
-        Rule r1 _ _ :< restFields -> foldl addField fstField restFields
+      expression = case sq of
+        [] -> [| pure $constructor |]
+        Rule r1 _ _ : restFields -> foldl addField fstField restFields
           where
             fstField = [| $constructor <$> $(T.varE (localRuleName r1)) |]
             addField soFar (Rule r _ _)
@@ -82,21 +78,21 @@ ruleToParser prefix (Rule nm mayDescription rt) = case rt of
     where
       nestRule = (helper, ([|Text.Earley.rule|] `T.appE` parseSeq))
         where
-          parseSeq = T.uInfixE [|pure Seq.empty|] [|(<|>)|] pSeq
+          parseSeq = T.uInfixE [|pure []|] [|(<|>)|] pSeq
             where
-              pSeq = [|liftA2 (<|)
+              pSeq = [|liftA2 (:)
                 $(T.varE (localRuleName innerNm)) $(T.varE helper) |]
 
   Plus (Rule innerNm _ _) -> [nestRule, makeRule topExpn]
     where
       nestRule = (helper, [|Text.Earley.rule $(parseSeq)|])
         where
-          parseSeq = [| pure Seq.empty <|> $pSeq |]
+          parseSeq = [| pure [] <|> $pSeq |]
             where
-              pSeq = [| (<|) <$> $(T.varE (localRuleName innerNm))
+              pSeq = [| (:) <$> $(T.varE (localRuleName innerNm))
                              <*> $(T.varE helper) |]
       topExpn = [| $constructor <$>
-        ( NonEmptySeq <$> $(T.varE (localRuleName innerNm))
+        ( (:|) <$> $(T.varE (localRuleName innerNm))
                    <*> $(T.varE helper)) |]
 
   Series neSeq -> [makeRule expression]
@@ -126,9 +122,9 @@ branchToParser
   -- ^ Module prefix
   -> Branch t
   -> T.ExpQ
-branchToParser prefix (Branch name rules) = case viewl rules of
-  EmptyL -> [| pure $constructor |]
-  (Rule rule1 _ _) :< xs -> foldl f z xs
+branchToParser prefix (Branch name rules) = case rules of
+  [] -> [| pure $constructor |]
+  (Rule rule1 _ _) : xs -> foldl f z xs
     where
       z = [| $constructor <$> $(T.varE (localRuleName rule1)) |]
       f soFar (Rule rule2 _ _) = [| $soFar <*> $(T.varE (localRuleName rule2)) |]
@@ -181,7 +177,7 @@ allRulesRecord
   :: Qualifier
   -- ^ Qualifier for data types corresponding to those created from
   -- the 'Rule's
-  -> Seq (Rule t)
+  -> [Rule t]
   -- ^ A record is created that holds a value for each 'Rule'
   -- in the 'Seq', as well as for every ancestor of these 'Rule's.
   -> T.DecsQ
@@ -229,7 +225,7 @@ earleyProduct
   -> Qualifier
   -- ^ Qualifier for the type created with 'allRulesRecord'
 
-  -> Seq (Rule t)
+  -> [Rule t]
   -- ^ Creates an Earley grammar that contains a 'Text.Earley.Prod'
   -- for each 'Rule' in this 'Seq', as well as all the ancestors of
   -- these 'Rule's.

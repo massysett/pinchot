@@ -1,11 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Pinchot.SyntaxTree.Wrappers where
 
-import Data.Foldable (toList)
-import Data.Maybe (catMaybes)
-import Data.Sequence (Seq)
-import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Control.Lens as Lens
+import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe (catMaybes)
 import qualified Language.Haskell.TH as T
 
 import Pinchot.Rules
@@ -28,12 +26,11 @@ import Pinchot.Types
 -- Example: "Pinchot.Examples.SyntaxTrees".
 
 wrappedInstances
-  :: Seq (Rule t)
+  :: [Rule t]
   -> T.DecsQ
 wrappedInstances
   = sequence
   . catMaybes
-  . toList
   . fmap singleWrappedInstance
   . families
 
@@ -119,7 +116,7 @@ wrappedTerminals
   -- ^ Wrapper Rule name
   -> T.Q T.Dec
 wrappedTerminals = makeWrapped
-  [t| Seq ( $(T.varT (T.mkName "t")), $(T.varT (T.mkName "a")) ) |]
+  [t| [ ($(T.varT (T.mkName "t")), $(T.varT (T.mkName "a"))) ] |]
 
 wrappedStar
   :: String
@@ -129,10 +126,9 @@ wrappedStar
   -> T.Q T.Dec
 wrappedStar wrappedName = makeWrapped innerName
   where
-    innerName = (T.conT ''Seq) `T.appT`
-      ((T.conT (T.mkName wrappedName))
-        `T.appT` (T.varT (T.mkName "t"))
-        `T.appT` (T.varT (T.mkName "a")))
+    innerName =
+      [t| [ $(T.conT (T.mkName wrappedName)) $(T.varT (T.mkName "t"))
+                                             $(T.varT (T.mkName "a")) ] |]
 
 wrappedPlus
   :: String
@@ -142,10 +138,10 @@ wrappedPlus
   -> T.Q T.Dec
 wrappedPlus wrappedName = makeWrapped tupName
   where
-    tupName = T.conT ''NonEmptySeq
-      `T.appT` ((T.conT (T.mkName wrappedName))
-                  `T.appT` (T.varT (T.mkName "t"))
-                  `T.appT` (T.varT (T.mkName "a")))
+    tupName = [t| NonEmpty ( $(T.conT (T.mkName wrappedName))
+                             $(T.varT (T.mkName "t"))
+                             $(T.varT (T.mkName "a"))) |]
+
 
 wrappedWrap
   :: String

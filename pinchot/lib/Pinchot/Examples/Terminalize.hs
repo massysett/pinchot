@@ -6,13 +6,13 @@
 -- that were used to create it.
 module Pinchot.Examples.Terminalize where
 
-import Data.Sequence.NonEmpty (NonEmptySeq)
+import Data.List.NonEmpty (NonEmpty)
 
 import Pinchot
 import Pinchot.Examples.Postal
 import qualified Pinchot.Examples.SyntaxTrees as SyntaxTrees
 
-terminalizeAddress :: SyntaxTrees.Address t a -> NonEmptySeq (t, a)
+terminalizeAddress :: SyntaxTrees.Address t a -> NonEmpty (t, a)
 terminalizeAddress = $(terminalizeRuleExp "SyntaxTrees" rAddress)
 
 $(terminalizers "SyntaxTrees" [rAddress])

@@ -80,7 +80,7 @@ branches :: Lens.Lens' (Branch t) [Rule t]
 branches
   = Lens.lens _branches (\b s -> b { _branches = s})
 
-newtype Predicate a = Predicate { unPredicate :: T.TExp (a -> Bool) }
+newtype Predicate a = Predicate { unPredicate :: T.Q (T.TExp (a -> Bool)) }
 
 instance Show (Predicate a) where show _ = "<predicate>"
 instance PrettyVal (Predicate a) where prettyVal _ = Pretty.Con "Predicate" []
@@ -94,10 +94,10 @@ data RuleType t
   | Opt (Rule t)
   | Star (Rule t)
   | Plus (Rule t)
-  | Series (NonEmpty (Predicate t))
+  | Series (NonEmpty t)
   deriving (Show, Generic)
 
-instance PrettyVal (RuleType t) where
+instance PrettyVal t => PrettyVal (RuleType t) where
   prettyVal r = case r of
     Terminal t -> Pretty.Con "Terminal" [prettyVal t]
     NonTerminal ne -> Pretty.Con "NonTerminal" [prettyNonEmpty prettyVal ne]
@@ -108,7 +108,7 @@ instance PrettyVal (RuleType t) where
     Plus r -> Pretty.Con "Plus" [prettyVal r]
     Series ne -> Pretty.Con "Series" [prettyNonEmpty prettyVal ne]
 
-_Terminal :: Lens.Prism' (RuleType t) (T.TExp (t -> Bool))
+_Terminal :: Lens.Prism' (RuleType t) (T.Q (T.TExp (t -> Bool)))
 _Terminal = Lens.prism' (Terminal . Predicate)
   (\r -> case r of { Terminal (Predicate i) -> Just i; _ -> Nothing })
 
@@ -136,9 +136,9 @@ _Plus :: Lens.Prism' (RuleType t) (Rule t)
 _Plus = Lens.prism' Plus
   (\r -> case r of { Plus x -> Just x; _ -> Nothing })
 
-_Series :: Lens.Prism' (RuleType t) (NonEmpty (T.TExp (t -> Bool)))
-_Series = Lens.prism' (Series . fmap Predicate)
-  (\r -> case r of { Series s -> Just (fmap unPredicate s); _ -> Nothing })
+_Series :: Lens.Prism' (RuleType t) (NonEmpty t)
+_Series = Lens.prism' Series
+  (\r -> case r of { Series s -> Just s; _ -> Nothing })
 
 -- | The name of a field in a record, without the leading
 -- underscore.

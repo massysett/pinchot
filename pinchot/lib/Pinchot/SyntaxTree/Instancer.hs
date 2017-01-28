@@ -12,9 +12,7 @@ import Data.Foldable (foldlM, toList)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Semigroup ((<>))
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import Data.Sequence.NonEmpty (NonEmptySeq)
+import Data.List.NonEmpty (NonEmpty)
 import qualified Language.Haskell.TH as T
 import qualified Text.Show.Pretty as Pretty
 
@@ -35,9 +33,9 @@ import Pinchot.Rules
 -- Example: "Pinchot.Examples.SyntaxTrees".
 
 bifunctorInstances
-  :: Seq (Rule t)
+  :: [Rule t]
   -> T.DecsQ
-bifunctorInstances = traverse f . toList . families
+bifunctorInstances = traverse f . families
   where
     f rule@(Rule ruleName _ _) = T.instanceD (T.cxt [])
       [t| Bifunctor.Bifunctor $(T.conT (T.mkName ruleName)) |]
@@ -60,7 +58,7 @@ bifunctorInstances = traverse f . toList . families
 -- Example: "Pinchot.Examples.SyntaxTrees".
 
 semigroupInstances
-  :: Seq (Rule t)
+  :: [Rule t]
   -> T.DecsQ
 semigroupInstances = fmap catMaybes . traverse f . toList . families
   where
@@ -90,7 +88,7 @@ semigroupInstances = fmap catMaybes . traverse f . toList . families
 --
 -- Example: "Pinchot.Examples.SyntaxTrees".
 monoidInstances
-  :: Seq (Rule t)
+  :: [Rule t]
   -> T.DecsQ
 monoidInstances = fmap catMaybes . traverse f . toList . families
   where
@@ -208,7 +206,7 @@ recordBimapLetBind
   :: Qualifier
   -> Map RuleName T.Name
   -> RuleName
-  -> Seq (Rule t)
+  -> [Rule t]
   -> T.Q T.DecQ
 recordBimapLetBind qual lkp name sq = do
   let clause = recordBimapClause qual lkp name sq
@@ -218,7 +216,7 @@ recordBimapClause
   :: Qualifier
   -> Map RuleName T.Name
   -> RuleName
-  -> Seq (Rule t)
+  -> [Rule t]
   -> T.ClauseQ
 recordBimapClause qual lkp name sq = do
   pairs <- traverse (recordBimapLetBindField lkp) . toList $ sq
@@ -338,7 +336,7 @@ memptyExpression qual rule = do
 
 wrappedMemptyExpression
   :: Qualifier
-  -> Seq RuleName
+  -> [RuleName]
   -> T.ExpQ
 wrappedMemptyExpression qual rules = foldr f [| mempty |] rules
   where
@@ -359,12 +357,12 @@ mappendExpression qual rule = do
 
 monoidCtors
   :: Rule t
-  -> Maybe (Seq RuleName)
+  -> Maybe ([RuleName])
 monoidCtors (Rule ruleName _ ty) = case ty of
   Wrap r -> do
     rest <- monoidCtors r
     return $ ruleName `Lens.cons` rest
-  Star _ -> Just (Seq.singleton ruleName)
+  Star _ -> Just [ruleName]
   _ -> Nothing
 
 -- | If possible, creates an expression of type
@@ -384,20 +382,20 @@ semigroupExpression qual rule = do
 
 semigroupCtors
   :: Rule t
-  -> Maybe (Seq RuleName)
+  -> Maybe ([RuleName])
 semigroupCtors (Rule ruleName _ ty) = case ty of
   Wrap r -> do
     rest <- semigroupCtors r
     return $ ruleName `Lens.cons` rest
-  Plus _ -> Just (Seq.singleton ruleName)
-  Star _ -> Just (Seq.singleton ruleName)
+  Plus _ -> Just [ruleName]
+  Star _ -> Just [ruleName]
   _ -> Nothing
 
 wrappedSemigroupExpression
   :: T.Name
   -- ^ mappend operator
   -> Qualifier
-  -> Seq RuleName
+  -> [RuleName]
   -- ^ Rule names, with the outermost name on the left side of the
   -- 'Seq'.
   -> T.ExpQ
@@ -477,7 +475,7 @@ prettyInstanceFamily
 --
 -- Example: "Pinchot.Examples.SyntaxTrees".
 prettyInstances
-  :: Seq (Rule t)
+  :: [Rule t]
   -> T.DecsQ
 prettyInstances
   = fmap toList . sequence . fmap prettyInstance . families
@@ -514,22 +512,22 @@ prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x]) ->
-       Pretty.Con name [prettySeq $(T.varE fVal) $(T.varE x)] |]
+       Pretty.Con name [prettyList $(T.varE fVal) $(T.varE x)] |]
   Plus (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
     [| \ $(T.conP (quald qual name) [T.varP x]) ->
-       Pretty.Con name [prettyNonEmptySeq $(T.varE fVal) $(T.varE x)] |]
+       Pretty.Con name [prettyNonEmpty $(T.varE fVal) $(T.varE x)] |]
   Series _ -> do
     x <- T.newName "x"
     [| \ $(T.conP (quald qual name) [T.varP x])
          -> Pretty.Con name
-            [prettyNonEmptySeq Pretty.prettyVal $(T.varE x)] |]
+            [prettyNonEmpty Pretty.prettyVal $(T.varE x)] |]
 
 prettyBranches
   :: Qualifier
   -> Map RuleName T.Name
-  -> NonEmptySeq (Branch t)
+  -> NonEmpty (Branch t)
   -> T.ExpQ
 prettyBranches qual lkp branches = do
   x <- T.newName "x"
@@ -576,7 +574,7 @@ prettyConstructor
   -> Map RuleName T.Name
   -> String
   -- ^ Name of branch, or name of data constructor
-  -> Seq (Rule t)
+  -> [Rule t]
   -> T.Q (T.PatQ, T.ExpQ)
 prettyConstructor qual lkp branchName branches
   = deconstruct (quald qual branchName) (length fieldNames)

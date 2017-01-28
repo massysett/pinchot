@@ -4,9 +4,7 @@
 
 module Pinchot.SyntaxTree where
 
-import Data.Foldable (toList)
-import Data.Sequence (Seq)
-import Data.Sequence.NonEmpty (NonEmptySeq)
+import Data.List.NonEmpty (NonEmpty, toList)
 import qualified Language.Haskell.TH as T
 
 import Pinchot.Rules
@@ -20,11 +18,10 @@ import Pinchot.Types
 syntaxTrees
   :: [T.Name]
   -- ^ What to derive, e.g. @[''Eq, ''Ord, ''Show]@
-  -> Seq (Rule t)
+  -> [Rule t]
   -> T.DecsQ
 syntaxTrees derives
   = traverse (ruleToType derives)
-  . toList
   . families
 
 branchConstructor :: Branch t -> T.ConQ
@@ -36,7 +33,7 @@ branchConstructor (Branch nm rules) = T.normalC name fields
       where
         notStrict = T.bangType
           (T.bang T.noSourceUnpackedness T.noSourceStrictness)
-    fields = toList . fmap mkField $ rules
+    fields = fmap mkField $ rules
     anyTypeVar = T.varT (T.mkName "a")
     charTypeVar = T.varT (T.mkName "t")
 
@@ -67,7 +64,7 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
 
   Record sq -> T.dataD (T.cxt []) name [charType, anyType] Nothing [ctor] derives
     where
-      ctor = T.recC name . zipWith mkField [(0 :: Int) ..] . toList $ sq
+      ctor = T.recC name . zipWith mkField [(0 :: Int) ..] $ sq
       mkField num (Rule rn _ _) = T.varBangType (T.mkName fldNm)
         (notStrict
           [t| $(T.conT (T.mkName rn)) $(charTypeVar) $(anyTypeVar) |])
@@ -88,15 +85,14 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
       newtypeCon = T.normalC name [sq]
         where
           sq = notStrict
-            [t| Seq ( $(T.conT (T.mkName inner)) $(charTypeVar)
-                                                 $(anyTypeVar) ) |]
+            [t| [$(T.conT (T.mkName inner)) $(charTypeVar) $(anyTypeVar)]  |]
 
   Plus (Rule inner _ _) ->
     T.newtypeD (T.cxt []) name [charType, anyType] Nothing cons derives
     where
       cons = T.normalC name [ne]
         where
-          ne = notStrict [t| NonEmptySeq $(ins) |]
+          ne = notStrict [t| NonEmpty $(ins) |]
             where
               ins = [t| $(T.conT (T.mkName inner))
                 $(charTypeVar) $(anyTypeVar) |]
@@ -105,7 +101,7 @@ ruleToType deriveNames (Rule nm _ ruleType) = case ruleType of
     T.newtypeD (T.cxt []) name [charType, anyType] Nothing cons derives
     where
       cons = T.normalC name [sq]
-      sq = notStrict [t| NonEmptySeq ( $(charTypeVar), $(anyTypeVar) ) |]
+      sq = notStrict [t| NonEmpty ( $(charTypeVar), $(anyTypeVar) ) |]
 
   where
     name = T.mkName nm
