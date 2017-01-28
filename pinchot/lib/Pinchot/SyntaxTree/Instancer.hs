@@ -16,6 +16,7 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Language.Haskell.TH as T
 import qualified Text.Show.Pretty as Pretty
 
+import Pinchot.Names
 import Pinchot.Types
 import Pinchot.Pretty
 import Pinchot.Rules

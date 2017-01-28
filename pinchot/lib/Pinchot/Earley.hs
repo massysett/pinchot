@@ -4,6 +4,7 @@
 
 module Pinchot.Earley where
 
+import Pinchot.Names
 import Pinchot.RecursiveDo
 import Pinchot.Rules
 import Pinchot.Types
@@ -26,7 +27,7 @@ earleyTerm (fore :| aft) = (:|) <$> parseHead <*> parseRest
     parseRest = foldr (liftA2 (:) . parse) (pure []) aft
     parse t = Text.Earley.satisfy ((== t) . fst)
 
--- | Creates a list of pairs.  Each list represents a statement in
+-- | Creates a list of pairs.  Each pair represents a statement in
 -- @do@ notation.  The first element of the pair is the name of the
 -- variable to which to bind the result of the expression, which is
 -- the second element of the pair.

@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -- The following extension is required only for the splice of Lens wrapped
 -- instances in 'wrappedInstances'
@@ -13,13 +14,15 @@
 -- generate them.
 module Pinchot.Examples.SyntaxTrees where
 
+import GHC.Generics (Generic)
+
 import Pinchot
 import Pinchot.Examples.Postal
 
 -- This generates the data types corresponding to the 'rAddress'
 -- 'Rule', as well as all the ancestors of that 'Rule'.
 $(syntaxTrees
-  [''Eq, ''Ord, ''Show, ''Foldable, ''Traversable, ''Functor]
+  [''Eq, ''Ord, ''Show, ''Foldable, ''Traversable, ''Functor, ''Generic]
   [rAddress])
 
 -- This generates intances of the Lens Wrapped typeclass.

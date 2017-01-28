@@ -7,6 +7,7 @@ import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
 import qualified Language.Haskell.TH.Syntax as Syntax
 
+import Pinchot.Names
 import Pinchot.Rules
 import Pinchot.Types
 

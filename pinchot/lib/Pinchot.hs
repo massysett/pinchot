@@ -96,6 +96,7 @@ module Pinchot
 
 import Pinchot.Earley
 import Pinchot.Locator
+import Pinchot.Names
 import Pinchot.Rules
 import Pinchot.SyntaxTree
 import Pinchot.SyntaxTree.Instancer

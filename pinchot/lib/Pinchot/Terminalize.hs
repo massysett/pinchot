@@ -10,6 +10,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Language.Haskell.TH as T
 
+import Pinchot.Names
 import Pinchot.Types
 import Pinchot.Rules
 
