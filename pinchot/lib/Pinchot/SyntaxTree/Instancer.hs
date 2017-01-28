@@ -63,14 +63,12 @@ semigroupInstances
   -> T.DecsQ
 semigroupInstances = fmap catMaybes . traverse f . toList . families
   where
-    nameT = T.varT $ T.mkName "t"
-    nameA = T.varT $ T.mkName "a"
     f rule@(Rule ruleName _ _) = case semigroupExpression "" rule of
       Nothing -> return Nothing
       Just expn -> fmap Just
         $ T.instanceD (T.cxt [])
           [t| Semigroup.Semigroup
-            ( $(T.conT (T.mkName ruleName)) $(nameT) $(nameA)) |]
+            ( $(T.conT (T.mkName ruleName)) $(typeT) $(typeA)) |]
           [T.valD (T.varP '(Semigroup.<>))
                   (T.normalB expn) []]
 
@@ -93,13 +91,11 @@ monoidInstances
   -> T.DecsQ
 monoidInstances = fmap catMaybes . traverse f . toList . families
   where
-    nameT = T.varT $ T.mkName "t"
-    nameA = T.varT $ T.mkName "a"
     f rule@(Rule ruleName _ _)
       = case (semigroupExpression "" rule, memptyExpression "" rule) of
       (Just expAppend, Just expMempty) -> fmap Just
         $ T.instanceD (T.cxt [])
-          [t| Monoid ( $( T.conT (T.mkName ruleName) ) $(nameT) $(nameA) ) |]
+          [t| Monoid ( $( T.conT (T.mkName ruleName) ) $(typeT) $(typeA) ) |]
           [ T.valD (T.varP 'mappend)
                    (T.normalB expAppend) []
           , T.valD (T.varP 'mempty)
@@ -443,13 +439,11 @@ prettyInstance
   :: Rule t
   -> T.DecQ
 prettyInstance rule = do
-  let a = T.varT $ T.mkName "a"
-      t = T.varT $ T.mkName "t"
-      ruleTypeName = T.conT . T.mkName . _ruleName $ rule
-      cxt = [ [t| Pretty.PrettyVal $t |]
-            , [t| Pretty.PrettyVal $a |]
+  let ruleTypeName = T.conT . T.mkName . _ruleName $ rule
+      cxt = [ [t| Pretty.PrettyVal $typeT |]
+            , [t| Pretty.PrettyVal $typeA |]
             ]
-      ty = [t| Pretty.PrettyVal ( $ruleTypeName $t $a ) |]
+      ty = [t| Pretty.PrettyVal ( $ruleTypeName $typeT $typeA ) |]
       dec = T.funD 'Pretty.prettyVal [clause]
         where
           clause = T.clause [] (T.normalB (prettyExpression "" rule)) []

@@ -57,20 +57,18 @@ recursiveDo
   -> T.ExpQ
   -- ^ Returns an expression whose value is the final return value
   -- from the @do@ block.
-recursiveDo binds final = [| fmap fst $ mfix $(fn) |]
-  where
-    fn = [| \ $(lazyPattern (fmap fst binds)) -> $doBlock |]
-    doBlock = T.doE (bindStmts ++ returnStmts)
-    bindStmts = map mkBind binds
-      where
-        mkBind (name, exp)
-          = T.bindS (T.varP name) exp
-    returnStmts = [bindRtnVal, returner]
-      where
-        rtnValName = T.mkName "_returner"
-        bindRtnVal = T.bindS (T.varP rtnValName) final
-        returner
-          = T.noBindS
-            [| return $(bigTuple (T.varE rtnValName) 
-                                 (fmap (T.varE . fst) binds)) |]
-
+recursiveDo binds final = do
+  rtnValName <- T.newName "_returner"
+  let bindStmts = map mkBind binds
+        where
+          mkBind (name, exp) = T.bindS (T.varP name) exp
+      fn = [| \ $(lazyPattern (fmap fst binds)) -> $doBlock |]
+      returnStmts = [bindRtnVal, returner]
+        where
+          bindRtnVal = T.bindS (T.varP rtnValName) final
+          returner
+            = T.noBindS
+              [| return $(bigTuple (T.varE rtnValName) 
+                                  (fmap (T.varE . fst) binds)) |]
+      doBlock = T.doE (bindStmts ++ returnStmts)
+  [| fmap fst $ mfix $(fn) |]

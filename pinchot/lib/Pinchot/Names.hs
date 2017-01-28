@@ -55,6 +55,10 @@ productions = T.mkName productionsStr
 recordName :: String -> T.Name
 recordName n = T.mkName $ "a'" ++ n
 
+-- | Qualified record name.
+qualRecordName :: Qualifier -> String -> T.Name
+qualRecordName q s = quald q ("a'" ++ s)
+
 newtype Namer a = Namer (St.StateT (Map String T.Name) T.Q a)
   deriving (Functor, Applicative, Monad)
 
