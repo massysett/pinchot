@@ -4,13 +4,10 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Pinchot.Types where
 
-import Pinchot.Intervals
-
 import qualified Control.Lens as Lens
 import Data.Data (Data)
+import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
-import Data.Sequence (Seq)
-import Data.Sequence.NonEmpty (NonEmptySeq)
 import qualified Language.Haskell.TH as T
 import Text.Show.Pretty (PrettyVal(prettyVal))
 import qualified Text.Show.Pretty as Pretty
@@ -50,7 +47,7 @@ data Rule t = Rule
   { _ruleName :: RuleName
   , _ruleDescription :: Maybe String
   , _ruleType :: RuleType t
-  } deriving (Eq, Ord, Show, Data, Generic, PrettyVal)
+  } deriving (Show, Generic, PrettyVal)
 
 -- Can't use Template Haskell in this module due to corecursive
 -- types
@@ -72,40 +69,50 @@ ruleType
 -- produces.
 data Branch t = Branch
   { _branchName :: BranchName
-  , _branches :: Seq (Rule t)
-  } deriving (Eq, Ord, Show, Data)
+  , _branches :: [Rule t]
+  } deriving (Show, Generic, PrettyVal)
 
 branchName :: Lens.Lens' (Branch t) BranchName
 branchName
   = Lens.lens _branchName (\b n -> b { _branchName = n })
 
-branches :: Lens.Lens' (Branch t) (Seq (Rule t))
+branches :: Lens.Lens' (Branch t) [Rule t]
 branches
   = Lens.lens _branches (\b s -> b { _branches = s})
 
-instance PrettyVal t => PrettyVal (Branch t) where
-  prettyVal (Branch b1 bs) = Pretty.Rec "Branch"
-    [ ("_branchName", prettyVal b1)
-    , ("_branches", prettySeq prettyVal bs)
-    ]
+newtype Predicate a = Predicate { unPredicate :: T.TExp (a -> Bool) }
+
+instance Show (Predicate a) where show _ = "<predicate>"
+instance PrettyVal (Predicate a) where prettyVal _ = Pretty.Con "Predicate" []
 
 -- | The type of a particular rule.
 data RuleType t
-  = Terminal (Intervals t)
-  | NonTerminal (NonEmptySeq (Branch t))
+  = Terminal (Predicate t)
+  | NonTerminal (NonEmpty (Branch t))
   | Wrap (Rule t)
-  | Record (Seq (Rule t))
+  | Record [Rule t]
   | Opt (Rule t)
   | Star (Rule t)
   | Plus (Rule t)
-  | Series (NonEmptySeq t)
-  deriving (Eq, Ord, Show, Data)
+  | Series (NonEmpty (Predicate t))
+  deriving (Show, Generic)
 
-_Terminal :: Lens.Prism' (RuleType t) (Intervals t)
-_Terminal = Lens.prism' Terminal
-  (\r -> case r of { Terminal i -> Just i; _ -> Nothing })
+instance PrettyVal (RuleType t) where
+  prettyVal r = case r of
+    Terminal t -> Pretty.Con "Terminal" [prettyVal t]
+    NonTerminal ne -> Pretty.Con "NonTerminal" [prettyNonEmpty prettyVal ne]
+    Wrap r -> Pretty.Con "Wrap" [prettyVal r]
+    Record rs -> Pretty.Con "Record" [Pretty.List $ fmap prettyVal rs]
+    Opt r -> Pretty.Con "Opt" [prettyVal r]
+    Star r -> Pretty.Con "Star" [prettyVal r]
+    Plus r -> Pretty.Con "Plus" [prettyVal r]
+    Series ne -> Pretty.Con "Series" [prettyNonEmpty prettyVal ne]
 
-_NonTerminal :: Lens.Prism' (RuleType t) (NonEmptySeq (Branch t))
+_Terminal :: Lens.Prism' (RuleType t) (T.TExp (t -> Bool))
+_Terminal = Lens.prism' (Terminal . Predicate)
+  (\r -> case r of { Terminal (Predicate i) -> Just i; _ -> Nothing })
+
+_NonTerminal :: Lens.Prism' (RuleType t) (NonEmpty (Branch t))
 _NonTerminal = Lens.prism' NonTerminal
   (\r -> case r of { NonTerminal b -> Just b; _ -> Nothing })
 
@@ -113,7 +120,7 @@ _Wrap :: Lens.Prism' (RuleType t) (Rule t)
 _Wrap = Lens.prism' Wrap
   (\r -> case r of { Wrap x -> Just x; _ -> Nothing })
 
-_Record :: Lens.Prism' (RuleType t) (Seq (Rule t))
+_Record :: Lens.Prism' (RuleType t) [Rule t]
 _Record = Lens.prism' Record
   (\r -> case r of { Record x -> Just x; _ -> Nothing })
 
@@ -129,21 +136,9 @@ _Plus :: Lens.Prism' (RuleType t) (Rule t)
 _Plus = Lens.prism' Plus
   (\r -> case r of { Plus x -> Just x; _ -> Nothing })
 
-_Series :: Lens.Prism' (RuleType t) (NonEmptySeq t)
-_Series = Lens.prism' Series
-  (\r -> case r of { Series s -> Just s; _ -> Nothing })
-
-instance PrettyVal t => PrettyVal (RuleType t) where
-  prettyVal x = case x of
-    Terminal ivl -> Pretty.Con "Terminal" [(prettyVal ivl)]
-    NonTerminal ne -> Pretty.Con "NonTerminal"
-      [prettyNonEmptySeq prettyVal ne]
-    Wrap r -> Pretty.Con "Wrap" [prettyVal r]
-    Record rs -> Pretty.Con "Record" [prettySeq prettyVal rs]
-    Opt rs -> Pretty.Con "Opt" [prettyVal rs]
-    Star rs -> Pretty.Con "Star" [prettyVal rs]
-    Plus rs -> Pretty.Con "Plus" [prettyVal rs]
-    Series sq -> Pretty.Con "Series" [prettyNonEmptySeq prettyVal sq]
+_Series :: Lens.Prism' (RuleType t) (NonEmpty (T.TExp (t -> Bool)))
+_Series = Lens.prism' (Series . fmap Predicate)
+  (\r -> case r of { Series s -> Just (fmap unPredicate s); _ -> Nothing })
 
 -- | The name of a field in a record, without the leading
 -- underscore.
@@ -173,14 +168,6 @@ recordFieldName idx par inn = "r'" ++ par ++ "'" ++ show idx ++ "'" ++ inn
 -- @\"MyAst\"@ here.  If you used @import qualified
 -- Data.MyLibrary.MyAst as MyLibrary.MyAst@, pass
 -- @\"MyLibrary.MyAst\"@ here.
---
--- I recommend that you always create a new module and that all you
--- do in that module is apply 'Pinchot.SyntaxTree.syntaxTrees' or
--- 'Pinchot.Earley.earleyProduct', and that you then perform an @import
--- qualified@ to bring those names into scope in the module in which
--- you use a function that takes a 'Qualifier' argument.  This
--- avoids unlikely, but possible, issues that could otherwise arise
--- due to naming conflicts.
 type Qualifier = String
 
 

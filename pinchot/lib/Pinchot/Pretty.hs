@@ -4,6 +4,7 @@ module Pinchot.Pretty where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Sequence.NonEmpty (NonEmptySeq(NonEmptySeq))
 import Text.Show.Pretty (Value)
 import qualified Text.Show.Pretty as Pretty
@@ -18,11 +19,19 @@ prettySeq f
   . fmap f
   . toList
 
+prettyList :: (a -> Value) -> [a] -> Value
+prettyList f = Pretty.List . fmap f
+
 -- | Prettify a 'NonEmptySeq'.
 prettyNonEmptySeq :: (a -> Value) -> NonEmptySeq a -> Value
 prettyNonEmptySeq f (NonEmptySeq a1 as)
   = Pretty.Rec "NonEmptySeq"
                [("_fore", f a1), ("_aft", prettySeq f as)]
+
+-- | Prettify a 'NonEmpty'.
+prettyNonEmpty :: (a -> Value) -> NonEmpty a -> Value
+prettyNonEmpty f (a1 :| as)
+  = Pretty.Con ":|" [(f a1), (Pretty.List (fmap f as))]
 
 -- | Prettify a 'Maybe'.
 prettyMaybe

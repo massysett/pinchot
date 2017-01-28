@@ -1,18 +1,15 @@
 {-# OPTIONS_HADDOCK not-home #-}
-{-# LANGUAGE OverloadedLists #-}
 module Pinchot.Rules where
 
 import Control.Monad (join)
 import Control.Monad.Trans.State (get, put, State)
 import qualified Control.Monad.Trans.State as State
-import Data.Sequence (Seq, (<|))
-import qualified Data.Sequence as Seq
-import qualified Data.Sequence.NonEmpty as NE
+import qualified Data.List.NonEmpty as NE
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Language.Haskell.TH as T
 
 import Pinchot.Types
-import Pinchot.Intervals
 
 -- | Name a 'Rule' for use in error messages.  If you do not name a
 -- rule using this combinator, the rule's type name will be used in
@@ -34,10 +31,10 @@ rule n = Rule n Nothing
 -- 'Pinchot.Examples.Postal.rLetter'.
 terminal
   :: RuleName
-  -> Intervals t
+  -> T.TExp (t -> Bool)
   -- ^ Valid terminal symbols
   -> Rule t
-terminal n i = rule n (Terminal i)
+terminal n i = rule n (Terminal (Predicate i))
 
 -- | Creates a non-terminal production rule.  This is the most
 -- flexible way to create non-terminals.  You can even create a
@@ -47,12 +44,12 @@ terminal n i = rule n (Terminal i)
 nonTerminal
   :: RuleName
   -- ^ Will be used for the name of the resulting type
-  -> Seq (BranchName, Seq (Rule t))
+  -> [(BranchName, [Rule t])]
   -- ^ Branches of the non-terminal production rule.  This 'Seq'
   -- must have at least one element; otherwise, an error will
   -- result.
   -> Rule t
-nonTerminal n branches = case NE.seqToNonEmptySeq branches of
+nonTerminal n branches = case NE.nonEmpty branches of
   Nothing -> error $ "nonTerminal: rule has no branches: " ++ n
   Just bs -> rule n . NonTerminal . fmap (uncurry Branch) $ bs
 
@@ -69,14 +66,14 @@ nonTerminal n branches = case NE.seqToNonEmptySeq branches of
 union
   :: RuleName
   -- ^ Will be used for the name of the resulting type
-  -> Seq (Rule t)
+  -> [Rule t]
   -- ^ List of branches.  There must be at least one branch;
   -- otherwise a compile-time error will occur.
   -> Rule t
 union n rs = nonTerminal n (fmap f rs)
   where
     f rule@(Rule branchName _ _)
-      = (n ++ '\'' : branchName, Seq.singleton rule)
+      = (n ++ '\'' : branchName, [rule])
 
 -- | Creates a production for a sequence of terminals.  Useful for
 -- parsing specific words.  When used with 'Pinchot.syntaxTrees', the
@@ -90,12 +87,12 @@ series
   :: RuleName
   -- ^ Will be used for the name of the resulting type, and for the
   -- name of the sole data constructor
-  -> [t]
+  -> [T.TExp (t -> Bool)]
   -- ^ The list of tokens to use.  This must have at least one item;
   -- otherwise this function will apply 'error'.  This list must be
   -- finite.
   -> Rule t
-series n = rule n . Series . get . NE.seqToNonEmptySeq . Seq.fromList
+series n = rule n . Series . fmap Predicate . get . NE.nonEmpty
   where
     get Nothing = error $ "term function used with empty list for rule: " ++ n
     get (Just a) = a
@@ -130,7 +127,7 @@ record
   -- ^ The name of this rule, which is used both as the type name
   -- and for the name of the sole data constructor
 
-  -> Seq (Rule t)
+  -> [Rule t]
   -- ^ The right-hand side of this rule.  This sequence can be empty,
   -- which results in an epsilon production.
   -> Rule t
@@ -170,34 +167,34 @@ plus r@(Rule innerNm _ _) = rule (innerNm ++ "'Plus") (Plus r)
 
 -- | Gets all ancestor rules to this 'Rule'.  Includes the current
 -- rule if it has not already been seen.
-getAncestors :: Rule t -> State (Set RuleName) (Seq (Rule t))
+getAncestors :: Rule t -> State (Set RuleName) [Rule t]
 getAncestors r@(Rule name _ ty) = do
   set <- get
   if Set.member name set
-    then return Seq.empty
+    then return []
     else do
       put (Set.insert name set)
       case ty of
-        Terminal _ -> return (Seq.singleton r)
+        Terminal _ -> return [r]
         NonTerminal bs -> do
-          ass <- fmap join . traverse branchAncestors . NE.nonEmptySeqToSeq $ bs
-          return $ r <| ass
+          ass <- fmap join . traverse branchAncestors . NE.toList $ bs
+          return $ r : ass
         Wrap c -> do
           cs <- getAncestors c
-          return $ r <| cs
+          return $ r : cs
         Record ls -> do
           cs <- fmap join . traverse getAncestors $ ls
-          return $ r <| cs
+          return $ r : cs
         Opt c -> do
           cs <- getAncestors c
-          return $ r <| cs
+          return $ r : cs
         Star c -> do
           cs <- getAncestors c
-          return $ r <| cs
+          return $ r : cs
         Plus c -> do
           cs <- getAncestors c
-          return $ r <| cs
-        Series _ -> return (Seq.singleton r)
+          return $ r : cs
+        Series _ -> return [r]
   where
     branchAncestors (Branch _ rs) = fmap join . traverse getAncestors $ rs
 
@@ -205,14 +202,14 @@ getAncestors r@(Rule name _ ty) = do
 -- duplicates.
 family
   :: Rule t
-  -> Seq (Rule t)
+  -> [Rule t]
 family rule = State.evalState (getAncestors rule) Set.empty
 
 -- | Gets all the ancestor 'Rule's of a sequence of 'Rule'.  Includes
 -- each 'Rule' that is in the sequence.  Skips duplicates.
 families
-  :: Seq (Rule t)
-  -> Seq (Rule t)
+  :: [Rule t]
+  -> [Rule t]
 families
   = join
   . flip State.evalState Set.empty
