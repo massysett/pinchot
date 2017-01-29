@@ -79,13 +79,11 @@ terminalizer qual rule@(Rule nm _ _) = sequence [sig, expn]
     charType = T.varT (T.mkName "t")
     sig
       | atLeastOne rule = T.sigD (T.mkName declName)
-          . T.forallT [T.PlainTV (T.mkName "t")
-                      , T.PlainTV (T.mkName "a")] (return [])
+          . T.forallT [tyVarBndrT , tyVarBndrA ] (return [])
           $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
             -> NonEmpty ($(charType), $(anyType)) |]
       | otherwise = T.sigD (T.mkName declName)
-          . T.forallT [ T.PlainTV (T.mkName "t")
-                      , T.PlainTV (T.mkName "a")] (return [])
+          . T.forallT [ tyVarBndrT , tyVarBndrA ] (return [])
           $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
               -> [($(charType), $(anyType))] |]
     expn = T.valD (T.varP $ T.mkName declName)

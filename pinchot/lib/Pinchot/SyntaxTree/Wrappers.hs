@@ -6,6 +6,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Maybe (catMaybes)
 import qualified Language.Haskell.TH as T
 
+import Pinchot.Names
 import Pinchot.Rules
 import Pinchot.Types
 
@@ -62,17 +63,16 @@ makeWrapped
 makeWrapped wrappedType nm = T.instanceD (return []) typ decs
   where
     name = T.mkName nm
-    local = T.mkName "_x"
     typ = (T.conT ''Lens.Wrapped) `T.appT`
       ((T.conT name)
-        `T.appT` (T.varT (T.mkName "t"))
-        `T.appT` (T.varT (T.mkName "a")))
+        `T.appT` (typeT)
+        `T.appT` (typeA))
     decs = [assocType, wrapper]
       where
         assocType = T.tySynInstD ''Lens.Unwrapped
           (T.tySynEqn [T.conT name
-            `T.appT` (T.varT (T.mkName "t"))
-            `T.appT` (T.varT (T.mkName "a"))]
+            `T.appT` (typeT)
+            `T.appT` (typeA)]
                       wrappedType)
         wrapper = T.funD 'Lens._Wrapped'
           [T.clause [] (T.normalB body) []]
@@ -81,14 +81,17 @@ makeWrapped wrappedType nm = T.instanceD (return []) typ decs
               `T.appE` unwrap
               `T.appE` doWrap
               where
-                unwrap = T.lamE [lambPat] (T.varE local)
-                  where
-                    lambPat = T.conP name [T.varP local]
-                doWrap = T.lamE [lambPat] expn
-                  where
-                    expn = (T.conE name)
-                      `T.appE` (T.varE local)
-                    lambPat = T.varP local
+                unwrap = do
+                  local <- T.newName "_local"
+                  let lambPat = T.conP name [T.varP local]
+                  T.lamE [lambPat] (T.varE local)
+                    
+                doWrap = do
+                  local <- T.newName "_local"
+                  let expn = (T.conE name) `T.appE` (T.varE local)
+                      lambPat = T.varP local
+                  T.lamE [lambPat] expn
+
 
 wrappedOpt
   :: String
@@ -101,22 +104,22 @@ wrappedOpt wrappedName = makeWrapped maybeName
     maybeName = (T.conT ''Maybe)
       `T.appT`
       ((T.conT (T.mkName wrappedName))
-        `T.appT` (T.varT (T.mkName "t"))
-        `T.appT` (T.varT (T.mkName "a")))
+        `T.appT` (typeT)
+        `T.appT` (typeA))
 
 wrappedTerminal
   :: String
   -- ^ Wrapper Rule name
   -> T.Q T.Dec
 wrappedTerminal = makeWrapped
-  [t| ( $(T.varT (T.mkName "t")), $(T.varT (T.mkName "a")) ) |]
+  [t| ( $(typeT), $(typeA) ) |]
 
 wrappedTerminals
   :: String
   -- ^ Wrapper Rule name
   -> T.Q T.Dec
 wrappedTerminals = makeWrapped
-  [t| [ ($(T.varT (T.mkName "t")), $(T.varT (T.mkName "a"))) ] |]
+  [t| [ ($(typeT), $(typeA)) ] |]
 
 wrappedStar
   :: String
@@ -127,8 +130,8 @@ wrappedStar
 wrappedStar wrappedName = makeWrapped innerName
   where
     innerName =
-      [t| [ $(T.conT (T.mkName wrappedName)) $(T.varT (T.mkName "t"))
-                                             $(T.varT (T.mkName "a")) ] |]
+      [t| [ $(T.conT (T.mkName wrappedName)) $(typeT)
+                                             $(typeA) ] |]
 
 wrappedPlus
   :: String
@@ -139,8 +142,8 @@ wrappedPlus
 wrappedPlus wrappedName = makeWrapped tupName
   where
     tupName = [t| NonEmpty ( $(T.conT (T.mkName wrappedName))
-                             $(T.varT (T.mkName "t"))
-                             $(T.varT (T.mkName "a"))) |]
+                             $(typeT)
+                             $(typeA)) |]
 
 
 wrappedWrap
@@ -153,5 +156,5 @@ wrappedWrap wrappedName = makeWrapped innerName
   where
     innerName =
       ((T.conT (T.mkName wrappedName))
-        `T.appT` (T.varT (T.mkName "t"))
-        `T.appT` (T.varT (T.mkName "a")))
+        `T.appT` (typeT)
+        `T.appT` (typeA))

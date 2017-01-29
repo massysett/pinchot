@@ -128,29 +128,29 @@ prismSignature qual nm (Branch inner rules) = T.sigD prismName
           addType soFar (Rule r _ _) = soFar `T.appT`
             [t| $(T.conT (quald qual r)) $(typeT) $(typeA) |]
 
+setterPatAndExpn
+  :: Qualifier
+  -> BranchName
+  -> [a]
+  -- ^ List of rules
+  -> T.Q (T.PatQ, T.ExpQ)
+setterPatAndExpn qual inner rules = do
+  names <- sequence . flip replicate (T.newName "_setterPatAndExpn")
+    . length $ rules
+  let pat = T.tupP . fmap T.varP $ names
+      expn = foldl addVar start names
+        where
+          start = T.conE (quald qual inner)
+          addVar acc nm = acc `T.appE` (T.varE nm)
+  return (pat, expn)
+
 prismSetter
   :: Qualifier
   -> Branch t
   -> T.ExpQ
-prismSetter qual (Branch inner rules) = T.lamE [pat] expn
-  where
-    (pat, expn) = case rules of
-      [] -> (T.tupP [], T.conE (quald qual inner))
-      _ : [] -> (T.varP local,
-        T.conE (quald qual inner)
-        `T.appE` T.varE local)
-        where
-          local = T.mkName "_x"
-      ls -> (T.tupP pats, set)
-        where
-          pats = fmap (\i -> T.varP (T.mkName ("_x" ++ show i)))
-            . take (length ls) $ [(0 :: Int) ..]
-          set = foldl addVar start . take (length ls)
-            $ [(0 :: Int) ..]
-            where
-              addVar acc i = acc `T.appE`
-                (T.varE (T.mkName ("_x" ++ show i)))
-              start = T.conE (quald qual inner)
+prismSetter qual (Branch inner rules) = do
+  (pat, expn) <- setterPatAndExpn qual inner rules
+  T.lamE [pat] expn
 
 -- | Returns a pattern and expression to match a particular branch; if
 -- there is a match, the expression will return each field, in a tuple
@@ -192,33 +192,15 @@ prismGetter
   -> T.ExpQ
 prismGetter qual (Branch inner rules) bs = do
   local <- T.newName "_prismGetter"
-
-  let pat = T.varP local
-      expn = T.caseE (T.varE local) $
-        T.match patCtor bodyCtor []
-        : rest
-        where
-          patCtor = T.conP (quald qual inner)
-            . fmap (\i -> T.varP (T.mkName $ "_y" ++ show i))
-            . take (length rules)
-            $ [(0 :: Int) ..]
-          bodyCtor = T.normalB . (T.conE 'Right `T.appE`)
-            $ case rules of
-            [] -> T.tupE []
-            _:[] -> T.varE (T.mkName "_y0")
-            _ -> T.tupE
-              . fmap (\i -> T.varE (T.mkName $ "_y" ++ show i))
-              . take (length rules)
-              $ [(0 :: Int) ..]
-          rest = case bs of
-            [] -> []
-            _ -> [T.match patBlank bodyBlank []]
-            where
-              patBlank = T.varP (T.mkName "_z")
-              bodyBlank = T.normalB
-                $ T.conE ('Left)
-                `T.appE` T.varE (T.mkName "_z")
-  T.lamE [pat] expn
+  (patCtor, bodyCtor) <- rightPatternAndExpression qual inner (length rules)
+  let firstElem = T.match patCtor (T.normalB bodyCtor) []
+  lastElem <- case leftPatternAndExpression bs of
+    Nothing -> return []
+    Just computation -> do
+      (patLeft, expLeft) <- computation
+      return [T.match patLeft (T.normalB expLeft) []]
+  T.lamE [T.varP local]
+    (T.caseE (T.varE local) $ firstElem : lastElem)
 
 
 -- | Creates prisms for each 'Branch'.
@@ -244,6 +226,66 @@ nonTerminalToOptics qual nm bsSeq = concat $ fmap makePrism bs
               `T.appE` (prismSetter qual branch)
               `T.appE` (prismGetter qual branch bs)
 
+recordLensSignature
+  :: Qualifier
+  -> RuleName
+  -- ^ Name of the main rule
+  -> RuleName
+  -- ^ Name of the rule for this lens
+  -> Int
+  -- ^ Index for this lens
+  -> T.DecQ
+recordLensSignature qual nm inner idx = T.sigD lensName (forallA
+  [t| Lens.Lens' ($(T.conT (quald qual nm)) $(typeT) $(typeA))
+                ($(T.conT (quald qual inner)) $(typeT) $(typeA))
+  |])
+  where
+    lensName = T.mkName $ recordFieldName idx nm inner
+
+recordLensGetter
+  :: Qualifier
+  -> String
+  -- ^ Record field name
+  -> T.ExpQ
+recordLensGetter qual fieldNm = do
+  namedRec <- T.newName "_namedRec"
+  let pat = T.varP namedRec
+      expn = (T.varE (quald qual ('_' : fieldNm)))
+        `T.appE` (T.varE namedRec)
+  T.lamE [pat] expn
+
+recordLensSetter
+  :: Qualifier
+  -> String
+  -- ^ Record field name
+  -> T.ExpQ
+recordLensSetter qual fieldNm = do
+  namedRec <- T.newName "_namedRec"
+  namedNewVal <- T.newName "_namedNewVal"
+  let patRec = T.varP namedRec
+      patNewVal = T.varP namedNewVal
+      expn = T.recUpdE (T.varE namedRec)
+        [ return ( quald qual ('_' : fieldNm)
+                , T.VarE namedNewVal) ]
+  T.lamE [patRec, patNewVal] expn
+
+recordLensFunction
+  :: Qualifier
+  -> RuleName
+  -- ^ Name of the main rule
+  -> RuleName
+  -- ^ Name of the rule for this lens
+  -> Int
+  -- ^ Index for this lens
+  -> T.DecQ
+recordLensFunction qual nm inner idx =
+  let fieldNm = recordFieldName idx nm inner
+      lensName = T.mkName $ recordFieldName idx nm inner
+      getter = recordLensGetter qual fieldNm
+      setter = recordLensSetter qual fieldNm
+      body = (T.varE 'Lens.lens) `T.appE` getter `T.appE` setter
+  in T.funD lensName [T.clause [] (T.normalB body) []]
+
 
 recordsToOptics
   :: Qualifier
@@ -253,38 +295,12 @@ recordsToOptics
   -- ^ Rule name
   -> [Rule t]
   -> [T.Q T.Dec]
-recordsToOptics qual nm
-  = concat . zipWith makeLens [(0 :: Int) ..]
-  where
-    makeLens index (Rule inner _ _) = [ signature, function ]
-      where
-        fieldNm = recordFieldName index nm inner
-        lensName = T.mkName fieldNm
-        signature = T.sigD lensName (forallA
-          [t| Lens.Lens' ($(T.conT (quald qual nm)) $(typeT) $(typeA))
-                         ($(T.conT (quald qual inner)) $(typeT) $(typeA))
-          |])
-
-        function = T.funD lensName [T.clause [] (T.normalB body) []]
-          where
-            namedRec = T.mkName "_namedRec"
-            namedNewVal = T.mkName "_namedNewVal"
-            body = (T.varE 'Lens.lens) `T.appE` getter `T.appE` setter
-              where
-                getter = T.lamE [pat] expn
-                  where
-                    pat = T.varP namedRec
-                    expn = (T.varE (quald qual ('_' : fieldNm)))
-                      `T.appE` (T.varE namedRec)
-
-                setter = T.lamE [patRec, patNewVal] expn
-                  where
-                    patRec = T.varP namedRec
-                    patNewVal = T.varP namedNewVal
-                    expn = T.recUpdE (T.varE namedRec)
-                      [ return ( quald qual ('_' : fieldNm)
-                               , T.VarE namedNewVal) ]
+recordsToOptics qual nm rules = do
+  let makeLens index (Rule inner _ _) = [ signature, function ]
+        where
+          signature = recordLensSignature qual nm inner index
+          function = recordLensFunction qual nm inner index
+  concat . zipWith makeLens [(0 :: Int) ..] $ rules
 
 forallA :: T.TypeQ -> T.TypeQ
-forallA = T.forallT [ T.PlainTV (T.mkName "t")
-                    , T.PlainTV (T.mkName "a")] (return [])
+forallA = T.forallT [ tyVarBndrT, tyVarBndrA ] (return [])
