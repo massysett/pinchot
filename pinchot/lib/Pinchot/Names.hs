@@ -59,11 +59,22 @@ recordName n = T.mkName $ "a'" ++ n
 qualRecordName :: Qualifier -> String -> String
 qualRecordName q s = quald q ("a'" ++ s)
 
+-- | Environment for the creation of new names.  Each name is
+-- associated with an arbitrary String.  Useful for assigning a new
+-- unique name to match a particular Pinchot identifier.  Use
+-- 'getName' to get the name associated with a particular identifier,
+-- creating it if necessary.
 newtype Namer a = Namer (St.StateT (Map String T.Name) T.Q a)
   deriving (Functor, Applicative, Monad)
 
 liftQ :: T.Q a -> Namer a
 liftQ = Namer . lift
+
+namerNewName :: Namer T.Name
+namerNewName = Namer $ lift (T.newName "_namerNewName")
+
+runNamer :: Namer a -> T.Q a
+runNamer (Namer n) = fmap fst $ (St.runStateT n) Map.empty
 
 -- | Get th Name that corresponds to a particular string.  If
 -- necessary, creates the name.
@@ -91,12 +102,6 @@ lookupTypeName str = do
   case mayName of
     Nothing -> fail $ "name not found: " ++ str
     Just r -> return r
-
-namerNewName :: Namer T.Name
-namerNewName = Namer $ lift (T.newName "_namerNewName")
-
-runNamer :: Namer a -> T.Q a
-runNamer (Namer n) = fmap fst $ (St.runStateT n) Map.empty
 
 -- | Many functions take an argument that holds the name qualifier
 -- for the module that contains the data types created by applying a

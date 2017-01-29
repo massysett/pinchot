@@ -19,9 +19,7 @@ advanceChar c (Loc !lin !col !pos)
   | c == '\t' = Loc lin (col + 8 - ((col - 1) `mod` 8)) (pos + 1)
   | otherwise = Loc lin (col + 1) (pos + 1)
 
--- | Takes any ListLike value based on 'Char' (@Seq@, @Text@,
--- @String@, etc.) and creates a 'Seq' which pairs each 'Char' with
--- its location.  Example: 'locatedFullParses'.
+-- | Adds locations to a list of characters.
 locations :: Traversable t => t Char -> t (Char, Loc)
 locations = snd . mapAccumL f (Loc 1 1 1)
   where
@@ -38,7 +36,7 @@ locatedFullParses
   :: (forall r. Earley.Grammar r (Earley.Prod r String (Char, Loc) (p Char Loc)))
   -- ^ Earley grammar with production that you want to parse.
   -> [Char]
-  -- ^ Source text, e.g. 'String', 'Data.Text', etc.
+  -- ^ Source text
   -> ([p Char Loc], Earley.Report String [(Char, Loc)])
   -- ^ A list of successful parses that when to the end of the
   -- source string, along with the Earley report showing possible

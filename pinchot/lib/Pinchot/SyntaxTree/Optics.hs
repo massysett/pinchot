@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Pinchot.SyntaxTree.Optics where
 
+import Data.Data (Data)
 import Data.List.NonEmpty (NonEmpty, toList)
 import qualified Control.Lens as Lens
 import qualified Language.Haskell.TH as T
@@ -19,15 +20,16 @@ import Pinchot.Types
 --
 -- * 'Pinchot.record' gets a single 'Lens.Lens'
 --
--- * 'Pinchot.wrap', 'Pinchot.opt', 'Pinchot.star',
--- and 'Pinchot.plus' do not get optics.
+-- * 'Pinchot.wrap', 'Pinchot.opt', 'Pinchot.star', and 'Pinchot.plus'
+-- do not get optics.  For those, you will typically want to use
+-- 'Pinchot.wrappedInstances'.
 --
 -- Each rule in the sequence of 'Rule', as well as all ancestors of
 -- those 'Rule's, will be handled.
 --
 -- Example: "Pinchot.Examples.RulesToOptics".
 rulesToOptics
-  :: Syntax.Lift t
+  :: (Syntax.Lift t, Data t)
   => Qualifier
   -- ^ Qualifier for module containing the data types that will get
   -- optics
@@ -47,13 +49,15 @@ rulesToOptics qual termName
 --
 -- * 'NonTerminal' gets a 'Lens.Prism' for each constructor
 --
--- * 'Terminals' gets a single 'Lens.Prism'
+-- * 'Series' gets a single 'Lens.Prism'
 --
 -- * 'Record' gets a single 'Lens.Lens'
 --
 -- * 'Wrap', 'Opt', 'Star', and 'Plus' do not get optics.
+--
+-- TODO add prism for 'Series'
 ruleToOptics
-  :: Syntax.Lift t
+  :: (Syntax.Lift t, Data t)
   => Qualifier
   -- ^ Qualifier for module containing the data type that will get
   -- optics
@@ -65,6 +69,7 @@ ruleToOptics qual termName (Rule nm _ ty) = case ty of
   Terminal pdct -> terminalToOptics qual termName nm pdct
   NonTerminal bs -> sequence $ nonTerminalToOptics qual nm bs
   Record sq -> sequence $ recordsToOptics qual nm sq
+  Series ne -> seriesToOptics qual termName nm ne
   _ -> return []
   
 
@@ -108,6 +113,44 @@ terminalToOptics qual termName nm (Predicate pdct) = do
                  | otherwise = Nothing
                in Lens.prism' fetch store
         |]
+
+
+seriesToOptics
+  :: (Data t, Syntax.Lift t)
+  => Qualifier
+  -- ^ Qualifier for module containing the data type that will get
+  -- optics
+  -> T.Name
+  -- ^ Terminal type name
+  -> String
+  -- ^ Rule name
+  -> NonEmpty t
+  -> T.Q [T.Dec]
+seriesToOptics qual termName nm terminals = do
+  ctorName <- lookupTypeName (quald qual nm)
+  e1 <- T.sigD (T.mkName ('_':nm))
+    $ T.forallT [ tyVarBndrA] (return [])
+    [t| Lens.Prism' (NonEmpty ( $(T.conT termName), $(typeA) ))
+                    ( $(T.conT ctorName) $(T.conT termName) $(typeA))
+    |]
+  
+  e2 <- T.valD prismName (T.normalB expn) []
+  return [e1, e2]
+  where
+    prismName = T.varP (T.mkName ('_' : nm))
+    expn = do
+      x <- T.newName "_x"
+      ctorName <- lookupValueName (quald qual nm)
+      let fetchPat = T.conP ctorName [T.varP x]
+          fetchName = T.varE x
+      [| let fetch $fetchPat = $fetchName
+             store terms
+                 | fmap fst terms == $(Syntax.liftData terminals)
+                    = Just ($(T.conE ctorName) terms )
+                 | otherwise = Nothing
+               in Lens.prism' fetch store
+        |]
+
 
 prismSignature
   :: Qualifier

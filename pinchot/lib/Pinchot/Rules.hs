@@ -77,7 +77,7 @@ union n rs = nonTerminal n (fmap f rs)
 
 -- | Creates a production for a sequence of terminals.  Useful for
 -- parsing specific words.  When used with 'Pinchot.syntaxTrees', the
--- resulting data type is a @newtype@ that wraps a @'NE.NonEmptySeq'
+-- resulting data type is a @newtype@ that wraps a @'NE.NonEmpty'
 -- (t, a)@, where @t@ is the type of the token (often 'Char') and @a@
 -- is an arbitrary metadata type.
 --

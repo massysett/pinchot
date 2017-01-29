@@ -224,7 +224,7 @@ earleyProduct
 
   -> [Rule t]
   -- ^ Creates an Earley grammar that contains a 'Text.Earley.Prod'
-  -- for each 'Rule' in this 'Seq', as well as all the ancestors of
+  -- for each 'Rule' in this list, as well as all the ancestors of
   -- these 'Rule's.
 
   -> T.ExpQ

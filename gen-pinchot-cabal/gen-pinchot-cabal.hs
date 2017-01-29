@@ -3,7 +3,7 @@ module Main (main) where
 import qualified Cartel
 
 version :: [Word]
-version = [0,22,0,0]
+version = [0,23,0,0]
 
 properties :: Cartel.Properties
 properties = Cartel.Properties
@@ -54,7 +54,6 @@ libraryDepends =
   , Cartel.atLeast "Earley" [0,11,0,1]
   , Cartel.atLeast "pretty-show" [1,6,9]
   , Cartel.atLeast "lens" [4,13]
-  , Cartel.atLeast "ListLike" [4,2,1]
   , Cartel.atLeast "semigroups" [0,18,1]
   ]
 
