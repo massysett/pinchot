@@ -33,17 +33,20 @@ branchToParser
   -- ^ Module prefix
   -> Branch t
   -> Namer T.ExpQ
-branchToParser prefix (Branch name rules) = case rules of
-  [] -> return [| pure $constructor |]
-  (Rule rule1 _ _) : xs -> do
-    rule1Name <- getName rule1
-    let z = [| $constructor <$> $(T.varE rule1Name) |]
-        f soFar (Rule rule2 _ _) = do
-          rule2Name <- getName rule2
-          return [| $soFar <*> $(T.varE rule2Name) |]
-    foldlM f z xs
+branchToParser prefix (Branch name rules) = do
+  case rules of
+    [] -> return [| pure $constructor |]
+    (Rule rule1 _ _) : xs -> do
+      rule1Name <- getName rule1
+      let z = [| $constructor <$> $(T.varE rule1Name) |]
+          f soFar (Rule rule2 _ _) = do
+            rule2Name <- getName rule2
+            return [| $soFar <*> $(T.varE rule2Name) |]
+      foldlM f z xs
   where
-    constructor = T.conE (quald prefix name)
+    constructor = do
+      ctorName <- lookupValueName (quald prefix name)
+      T.conE ctorName
 
 -- | Creates a list of pairs.  Each pair represents a statement in
 -- @do@ notation.  The first element of the pair is the name of the
@@ -61,15 +64,18 @@ ruleToParser prefix (Rule nm mayDescription rt) = do
   let desc = maybe nm id mayDescription
       makeRule expression = (bindName,
         [|Text.Earley.rule ($expression Text.Earley.<?> desc)|])
-      constructor = T.conE (quald prefix nm)
+      constructor = do
+        ctorName <- lookupValueName (quald prefix nm)
+        T.conE ctorName
       wrapper wrapRule = [|fmap $constructor $(T.varE wrapRule) |]
   case rt of
     Terminal (Predicate pdct) -> return [makeRule expression]
       where
-        expression =
+        expression = do
+          ctorName <- lookupValueName (quald prefix nm)
           [| let f (c, a)
                   | $(fmap T.unType pdct) c = Just
-                      ($(T.conE (quald prefix nm)) (c, a))
+                      ($(T.conE ctorName) (c, a))
                   | otherwise = Nothing
             in Text.Earley.terminal f |]
 
@@ -198,9 +204,10 @@ allRulesRecord prefix ruleSeq
       where
         st = T.bangType (T.bang T.noSourceUnpackedness T.noSourceStrictness) ty
           where
-            ty = [t| Text.Earley.Prod $typeR String ($typeT, $typeA)
-                      ( $(T.conT (quald prefix ruleNm))
-                          $typeT $typeA) |]
+            ty = do
+              ctorName <- lookupTypeName (quald prefix ruleNm)
+              [t| Text.Earley.Prod $typeR String ($typeT, $typeA)
+                      ( $(T.conT ctorName) $typeT $typeA) |]
 
 -- | Creates a 'Text.Earley.Grammar' that contains a
 -- 'Text.Earley.Prod' for every given 'Rule' and its ancestors.
@@ -236,8 +243,12 @@ earleyProduct pfxRule pfxRec ruleSeq = do
     allRuleBindNames <- traverse getName allRuleNames
     let mkRec ruleName bindName = (qualRecordName pfxRec ruleName, T.VarE bindName)
         ruleBindNamePairs = zipWith mkRec allRuleNames allRuleBindNames
-        final = [| return $(T.recConE (quald pfxRec productionsStr)
-                                      (fmap return ruleBindNamePairs)) |]
+        convertPair (str, expn) = do
+          nm <- lookupValueName str
+          return (nm, expn)
+        final = do
+          recName <- lookupValueName (quald pfxRec productionsStr)
+          [| return $(T.recConE recName (fmap convertPair ruleBindNamePairs)) |]
     return (bnds, final)
   recursiveDo binds topName
 

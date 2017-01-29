@@ -166,8 +166,9 @@ terminalBimapLetBind
   -> T.Q T.DecQ
 terminalBimapLetBind qual fa fb lkp name = do
   val <- T.newName $ "terminalBimapLetBind" ++ name
-  let body = T.lamE [T.conP (quald qual name) [T.varP val]]
-        [| $(T.conE (quald qual name))
+  ctorName <- lookupValueName (quald qual name)
+  let body = T.lamE [T.conP ctorName [T.varP val]]
+        [| $(T.conE ctorName)
               ( $(T.varE fa) . fst $ $(T.varE val)
               , $(T.varE fb) . snd $ $(T.varE val)
               )
@@ -194,8 +195,9 @@ wrapBimapLetBind
   -> T.Q T.DecQ
 wrapBimapLetBind qual lkp name inner = do
   val <- T.newName "wrapLetBind"
-  let expn = T.lamE [T.conP (quald qual name) [T.varP val]]
-        [| $(T.conE (quald qual name))
+  ctorName <- lookupValueName (quald qual name)
+  let expn = T.lamE [T.conP ctorName [T.varP val]]
+        [| $(T.conE ctorName)
             ( $(T.varE (errLookup inner lkp)) $(T.varE val) ) |]
   return $ T.valD (T.varP (errLookup name lkp)) (T.normalB expn) []
 
@@ -217,11 +219,12 @@ recordBimapClause
   -> T.ClauseQ
 recordBimapClause qual lkp name sq = do
   pairs <- traverse (recordBimapLetBindField lkp) . toList $ sq
-  let body = foldl f (T.conE (quald qual name)) . fmap snd $ pairs
+  ctorName <- lookupValueName (quald qual name)
+  let body = foldl f (T.conE ctorName) . fmap snd $ pairs
         where
           f acc expn = [| $(acc) $(expn) |]
   let pats = fmap fst pairs
-  T.clause [T.conP (quald qual name) pats] (T.normalB body) []
+  T.clause [T.conP ctorName pats] (T.normalB body) []
 
 recordBimapLetBindField
   :: Map RuleName T.Name
@@ -242,11 +245,12 @@ optBimapLetBind
   -> T.Q T.DecQ
 optBimapLetBind qual lkp name inner = do
   val <- T.newName $ "optBimapLetBind" ++ name
-  let body = [| $(T.conE (quald qual name)) $ case $(T.varE val) of
+  ctorName <- lookupValueName (quald qual name)
+  let body = [| $(T.conE ctorName) $ case $(T.varE val) of
                   Nothing -> Nothing
                   Just v -> Just $ $(T.varE (errLookup inner lkp)) v
              |]
-  let clause = T.clause [T.conP (quald qual name) [T.varP val]]
+  let clause = T.clause [T.conP ctorName [T.varP val]]
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
 
@@ -260,9 +264,10 @@ starBimapLetBind
   -> T.Q T.DecQ
 starBimapLetBind qual lkp name inner = do
   val <- T.newName $ "starBimapLetBind" ++ name
-  let body = [| $(T.conE (quald qual name))
+  ctorName <- lookupValueName (quald qual name)
+  let body = [| $(T.conE ctorName)
                 $ fmap $(T.varE (errLookup inner lkp)) $(T.varE val) |]
-  let clause = T.clause [T.conP (quald qual name) [T.varP val]]
+  let clause = T.clause [T.conP ctorName [T.varP val]]
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
 
@@ -276,9 +281,10 @@ plusBimapLetBind
   -> T.Q T.DecQ
 plusBimapLetBind qual lkp name inner = do
   val <- T.newName $ "plusBimapLetBind" ++ name
-  let body = [| $(T.conE (quald qual name))
+  ctorName <- lookupValueName (quald qual name)
+  let body = [| $(T.conE ctorName)
                 $ fmap $(T.varE (errLookup inner lkp)) $(T.varE val) |]
-  let clause = T.clause [T.conP (quald qual name) [T.varP val]]
+  let clause = T.clause [T.conP ctorName [T.varP val]]
         (T.normalB body) []
   return $ T.funD (errLookup name lkp) [clause]
 
@@ -291,8 +297,9 @@ seriesBimapLetBind
   -> T.Q T.DecQ
 seriesBimapLetBind qual fa fb lkp name = do
   val <- T.newName $ "termBimapLetBind" ++ name
-  let body = T.lamE [T.conP (quald qual name) [T.varP val]]
-        [| $(T.conE (quald qual name))
+  ctorName <- lookupValueName (quald qual name)
+  let body = T.lamE [T.conP ctorName [T.varP val]]
+        [| $(T.conE ctorName)
               (fmap ( Bifunctor.bimap $(T.varE fa) $(T.varE fb) )
                     $(T.varE val) ) |]
   return $ T.valD (T.varP (errLookup name lkp)) (T.normalB body) []
@@ -337,7 +344,9 @@ wrappedMemptyExpression
   -> T.ExpQ
 wrappedMemptyExpression qual rules = foldr f [| mempty |] rules
   where
-    f name acc = [| $(T.conE (quald qual name)) $(acc) |]
+    f name acc = do
+      ctorName <- lookupValueName (quald qual name)
+      [| $(T.conE ctorName) $(acc) |]
 
 -- | If possible, creates an expression of type
 --
@@ -409,11 +418,15 @@ wrappedSemigroupExpression append qual rules = names >>= makeExp
       where
         mkPat name = foldr f (T.varP name) rules
           where
-            f rule acc = T.conP (quald qual rule) [acc]
+            f rule acc = do
+              ctorName <- lookupValueName (quald qual rule)
+              T.conP ctorName [acc]
         mkRes = foldr f
           [| $(T.varE append) $(T.varE x1) $(T.varE x2) |] rules
           where
-            f rule acc = T.appE (T.conE (quald qual rule)) acc
+            f rule acc = do
+              ctorName <- lookupValueName (quald qual rule)
+              T.appE (T.conE ctorName) acc
 
 -- | Creates an expression of type
 --
@@ -487,13 +500,15 @@ prettyExpressionInEnv
 prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
   Terminal _ -> do
     x <- T.newName "x"
-    [| \ $(T.conP (quald qual name) [T.varP x])
+    ctorName <- lookupValueName (quald qual name)
+    [| \ $(T.conP ctorName [T.varP x])
           -> Pretty.Con name [Pretty.prettyVal $(T.varE x)] |]
   NonTerminal sq -> prettyBranches qual lkp sq
   Wrap (Rule inner _ _) -> do
     x <- T.newName "x"
+    ctorName <- lookupValueName (quald qual name)
     fVal <- lookupRule lkp inner
-    [| \ $(T.conP (quald qual name) [T.varP x])
+    [| \ $(T.conP ctorName [T.varP x])
          -> Pretty.Con name [$(T.varE fVal) $(T.varE x)] |]
   Record rules -> do
     (pat, expn) <- prettyConstructor qual lkp name rules
@@ -501,21 +516,25 @@ prettyExpressionInEnv qual lkp (Rule name _ ty) = case ty of
   Opt (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
-    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+    ctorName <- lookupValueName (quald qual name)
+    [| \ $(T.conP ctorName [T.varP x]) ->
       Pretty.Con name [prettyMaybe $(T.varE fVal) $(T.varE x)] |]
   Star (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
-    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+    ctorName <- lookupValueName (quald qual name)
+    [| \ $(T.conP ctorName [T.varP x]) ->
        Pretty.Con name [prettyList $(T.varE fVal) $(T.varE x)] |]
   Plus (Rule inner _ _) -> do
     x <- T.newName "x"
     fVal <- lookupRule lkp inner
-    [| \ $(T.conP (quald qual name) [T.varP x]) ->
+    ctorName <- lookupValueName (quald qual name)
+    [| \ $(T.conP ctorName [T.varP x]) ->
        Pretty.Con name [prettyNonEmpty $(T.varE fVal) $(T.varE x)] |]
   Series _ -> do
     x <- T.newName "x"
-    [| \ $(T.conP (quald qual name) [T.varP x])
+    ctorName <- lookupValueName (quald qual name)
+    [| \ $(T.conP ctorName [T.varP x])
          -> Pretty.Con name
             [prettyNonEmpty Pretty.prettyVal $(T.varE x)] |]
 
@@ -571,9 +590,9 @@ prettyConstructor
   -- ^ Name of branch, or name of data constructor
   -> [Rule t]
   -> T.Q (T.PatQ, T.ExpQ)
-prettyConstructor qual lkp branchName branches
-  = deconstruct (quald qual branchName) (length fieldNames)
-      getFinal
+prettyConstructor qual lkp branchName branches = do
+  ctorName <- lookupValueName (quald qual branchName)
+  deconstruct ctorName (length fieldNames) getFinal
   where
     fieldNames = toList . fmap _ruleName $ branches
     getFinal fields = [| Pretty.Con branchName $(values) |]

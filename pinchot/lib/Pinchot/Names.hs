@@ -56,11 +56,14 @@ recordName :: String -> T.Name
 recordName n = T.mkName $ "a'" ++ n
 
 -- | Qualified record name.
-qualRecordName :: Qualifier -> String -> T.Name
+qualRecordName :: Qualifier -> String -> String
 qualRecordName q s = quald q ("a'" ++ s)
 
 newtype Namer a = Namer (St.StateT (Map String T.Name) T.Q a)
   deriving (Functor, Applicative, Monad)
+
+liftQ :: T.Q a -> Namer a
+liftQ = Namer . lift
 
 -- | Get th Name that corresponds to a particular string.  If
 -- necessary, creates the name.
@@ -78,6 +81,13 @@ getName str = Namer $ do
 lookupValueName :: String -> T.Q T.Name
 lookupValueName str = do
   mayName <- T.lookupValueName str
+  case mayName of
+    Nothing -> fail $ "name not found: " ++ str
+    Just r -> return r
+
+lookupTypeName :: String -> T.Q T.Name
+lookupTypeName str = do
+  mayName <- T.lookupTypeName str
   case mayName of
     Nothing -> fail $ "name not found: " ++ str
     Just r -> return r
@@ -113,7 +123,7 @@ quald
   :: Qualifier
   -> String
   -- ^ Item to be named - constructor, value, etc.
-  -> T.Name
+  -> String
 quald qual suf
-  | null qual = T.mkName suf
-  | otherwise = T.mkName (qual ++ '.':suf)
+  | null qual = suf
+  | otherwise = (qual ++ '.':suf)

@@ -78,14 +78,18 @@ terminalizer qual rule@(Rule nm _ _) = sequence [sig, expn]
     anyType = T.varT (T.mkName "a")
     charType = T.varT (T.mkName "t")
     sig
-      | atLeastOne rule = T.sigD (T.mkName declName)
-          . T.forallT [tyVarBndrT , tyVarBndrA ] (return [])
-          $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
-            -> NonEmpty ($(charType), $(anyType)) |]
-      | otherwise = T.sigD (T.mkName declName)
-          . T.forallT [ tyVarBndrT , tyVarBndrA ] (return [])
-          $ [t| $(T.conT (quald qual nm)) $(charType) $(anyType)
-              -> [($(charType), $(anyType))] |]
+      | atLeastOne rule = do
+          ctorName <- lookupTypeName (quald qual nm)
+          T.sigD (T.mkName declName)
+            . T.forallT [tyVarBndrT , tyVarBndrA ] (return [])
+            $ [t| $(T.conT ctorName) $(charType) $(anyType)
+              -> NonEmpty ($(charType), $(anyType)) |]
+      | otherwise = do
+          ctorName <- lookupTypeName (quald qual nm)
+          T.sigD (T.mkName declName)
+            . T.forallT [ tyVarBndrT , tyVarBndrA ] (return [])
+            $ [t| $(T.conT ctorName) $(charType) $(anyType)
+                -> [($(charType), $(anyType))] |]
     expn = T.valD (T.varP $ T.mkName declName)
       (T.normalB (terminalizeRuleExp qual rule)) []
 
@@ -164,7 +168,8 @@ terminalizeSingleRule
 terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
   Terminal _ -> do
     x <- T.newName "x"
-    let pat = T.conP (quald qual nm) [T.varP x]
+    ctorName <- lookupValueName (quald qual nm)
+    let pat = T.conP ctorName [T.varP x]
     [| \ $(pat) -> ( $(T.varE x) :| [] ) |]
 
   NonTerminal bs -> do
@@ -179,7 +184,8 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
   Wrap (Rule inner _ _) -> do
     x <- T.newName "x"
-    let pat = T.conP (quald qual nm) [T.varP x]
+    ctorName <- lookupValueName (quald qual nm)
+    let pat = T.conP ctorName [T.varP x]
     [| \ $(pat) -> $(T.varE (lookupName lkp inner)) $(T.varE x) |]
 
   Record rs -> do
@@ -191,7 +197,8 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
   Opt r@(Rule inner _ _) -> do
     x <- T.newName "x"
-    let pat = T.conP (quald qual nm) [T.varP x]
+    ctorName <- lookupValueName (quald qual nm)
+    let pat = T.conP ctorName [T.varP x]
     [| \ $(pat) -> maybe [] 
           $(convert (T.varE (lookupName lkp inner))) $(T.varE x) |]
     where
@@ -200,7 +207,8 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
   Star r@(Rule inner _ _) -> do
     x <- T.newName "x"
-    let pat = T.conP (quald qual nm) [T.varP x]
+    ctorName <- lookupValueName (quald qual nm)
+    let pat = T.conP ctorName [T.varP x]
         convert e | atLeastOne r = [| NonEmpty.toList . $(e) |]
                   | otherwise = e
     [| \ $(pat) -> join . fmap $(convert (T.varE (lookupName lkp inner)))
@@ -209,7 +217,8 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
   Plus r@(Rule inner _ _)
     | atLeastOne r -> do
         x <- T.newName "x"
-        let pat = T.conP (quald qual nm) [T.varP x]
+        ctorName <- lookupValueName (quald qual nm)
+        let pat = T.conP ctorName [T.varP x]
         [| \ $(pat) ->
             let getTermNonEmpty = $(T.varE (lookupName lkp inner))
                 getTerms (e1 :| es)
@@ -228,7 +237,8 @@ terminalizeSingleRule qual lkp rule@(Rule nm _ ty) = case ty of
 
   Series _ -> do
     x <- T.newName "x"
-    let pat = T.conP (quald qual nm) [T.varP x]
+    ctorName <- lookupValueName (quald qual nm)
+    let pat = T.conP ctorName [T.varP x]
     [| \ $(pat) -> $(T.varE x) |]
 
 terminalizeProductAllowsZero
@@ -240,7 +250,8 @@ terminalizeProductAllowsZero
   -> T.Q (T.PatQ, T.ExpQ)
 terminalizeProductAllowsZero qual lkp name bs = do
   pairs <- traverse (terminalizeProductRule lkp) $ bs
-  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
+  ctorName <- lookupValueName (quald qual name)
+  let pat = T.conP ctorName (fmap (fst . snd) pairs)
       body = case pairs of
         [] -> [| [] |]
         x:xs -> foldl f start xs
@@ -268,7 +279,8 @@ terminalizeProductAtLeastOne
   -> T.Q (T.PatQ, T.ExpQ)
 terminalizeProductAtLeastOne qual lkp name bs = do
   pairs <- traverse (terminalizeProductRule lkp) $ bs
-  let pat = T.conP (quald qual name) (fmap (fst . snd) pairs)
+  ctorName <- lookupValueName (quald qual name)
+  let pat = T.conP ctorName (fmap (fst . snd) pairs)
       body = [| ( $(leadSeq) `prependList` $(firstNonEmpty))
                 `appendList` $(trailSeq) |]
         where

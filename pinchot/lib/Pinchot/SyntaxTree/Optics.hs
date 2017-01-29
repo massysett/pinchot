@@ -85,24 +85,26 @@ terminalToOptics
   -> Predicate t
   -> T.Q [T.Dec]
 terminalToOptics qual termName nm (Predicate pdct) = do
+  ctorName <- lookupTypeName (quald qual nm)
   e1 <- T.sigD (T.mkName ('_':nm))
     $ T.forallT [ tyVarBndrA] (return [])
     [t| Lens.Prism' ( $(T.conT termName), $(typeA) )
-                    ($(T.conT (quald qual nm)) $(T.conT termName) $(typeA))
+                    ( $(T.conT ctorName) $(T.conT termName) $(typeA))
     |]
   
   e2 <- T.valD prismName (T.normalB expn) []
   return [e1, e2]
   where
     prismName = T.varP (T.mkName ('_' : nm))
-    ctor = T.conE (quald qual nm)
     expn = do
       x <- T.newName "_x"
-      let fetchPat = T.conP (quald qual nm) [T.varP x]
+      ctorName <- lookupValueName (quald qual nm)
+      let fetchPat = T.conP ctorName [T.varP x]
           fetchName = T.varE x
       [| let fetch $fetchPat = $fetchName
              store (term, a)
-                 | $(fmap T.unType pdct) term = Just ($(ctor) (term, a))
+                 | $(fmap T.unType pdct) term
+                    = Just ($(T.conE ctorName) (term, a))
                  | otherwise = Nothing
                in Lens.prism' fetch store
         |]
@@ -113,20 +115,25 @@ prismSignature
   -- ^ Rule name
   -> Branch t
   -> T.DecQ
-prismSignature qual nm (Branch inner rules) = T.sigD prismName
-  (forallA [t| Lens.Prism'
-      ($(T.conT (quald qual nm)) $(typeT) $(typeA))
-      $(fieldsType) |])
+prismSignature qual nm (Branch inner rules) = do
+  ctorName <- lookupTypeName (quald qual nm)
+  T.sigD prismName
+    (forallA [t| Lens.Prism'
+        ($(T.conT ctorName) $(typeT) $(typeA))
+        $(fieldsType) |])
   where
     prismName = T.mkName ('_' : inner)
     fieldsType = case rules of
       [] -> T.tupleT 0
-      Rule r1 _ _ : [] -> [t| $(T.conT (quald qual r1))
-        $(typeT) $(typeA) |]
+      Rule r1 _ _ : [] -> do
+        ctorName <- lookupTypeName (quald qual r1)
+        [t| $(T.conT ctorName) $(typeT) $(typeA) |]
       rs -> foldl addType (T.tupleT (length rs)) rs
         where
-          addType soFar (Rule r _ _) = soFar `T.appT`
-            [t| $(T.conT (quald qual r)) $(typeT) $(typeA) |]
+          addType soFar (Rule r _ _) = do
+            ctorName <- lookupTypeName (quald qual r)
+            soFar `T.appT`
+              [t| $(T.conT ctorName) $(typeT) $(typeA) |]
 
 setterPatAndExpn
   :: Qualifier
@@ -140,7 +147,9 @@ setterPatAndExpn qual inner rules = do
   let pat = T.tupP . fmap T.varP $ names
       expn = foldl addVar start names
         where
-          start = T.conE (quald qual inner)
+          start = do
+            ctorName <- lookupValueName (quald qual inner)
+            T.conE ctorName
           addVar acc nm = acc `T.appE` (T.varE nm)
   return (pat, expn)
 
@@ -163,7 +172,8 @@ rightPatternAndExpression
   -> T.Q (T.PatQ, T.ExpQ)
 rightPatternAndExpression qual inner n = do
   names <- sequence . replicate n $ T.newName "_patternAndExpression"
-  let pat = T.conP (quald qual inner) . fmap T.varP $ names
+  ctorName <- lookupValueName (quald qual inner)
+  let pat = T.conP ctorName . fmap T.varP $ names
       expn = T.appE (T.conE 'Right)
         . T.tupE
         . fmap T.varE
@@ -235,10 +245,13 @@ recordLensSignature
   -> Int
   -- ^ Index for this lens
   -> T.DecQ
-recordLensSignature qual nm inner idx = T.sigD lensName (forallA
-  [t| Lens.Lens' ($(T.conT (quald qual nm)) $(typeT) $(typeA))
-                ($(T.conT (quald qual inner)) $(typeT) $(typeA))
-  |])
+recordLensSignature qual nm inner idx = do
+  ctorOuter <- lookupTypeName (quald qual nm)
+  ctorInner <- lookupTypeName (quald qual inner)
+  T.sigD lensName (forallA
+    [t| Lens.Lens' ($(T.conT ctorOuter) $(typeT) $(typeA))
+                  ($(T.conT ctorInner) $(typeT) $(typeA))
+    |])
   where
     lensName = T.mkName $ recordFieldName idx nm inner
 
@@ -249,8 +262,9 @@ recordLensGetter
   -> T.ExpQ
 recordLensGetter qual fieldNm = do
   namedRec <- T.newName "_namedRec"
+  fieldNm <- lookupValueName $ quald qual ('_' : fieldNm)
   let pat = T.varP namedRec
-      expn = (T.varE (quald qual ('_' : fieldNm)))
+      expn = (T.varE fieldNm)
         `T.appE` (T.varE namedRec)
   T.lamE [pat] expn
 
@@ -262,11 +276,11 @@ recordLensSetter
 recordLensSetter qual fieldNm = do
   namedRec <- T.newName "_namedRec"
   namedNewVal <- T.newName "_namedNewVal"
+  fieldName <- lookupValueName (quald qual ('_' : fieldNm))
   let patRec = T.varP namedRec
       patNewVal = T.varP namedNewVal
       expn = T.recUpdE (T.varE namedRec)
-        [ return ( quald qual ('_' : fieldNm)
-                , T.VarE namedNewVal) ]
+        [ return (fieldName , T.VarE namedNewVal) ]
   T.lamE [patRec, patNewVal] expn
 
 recordLensFunction
