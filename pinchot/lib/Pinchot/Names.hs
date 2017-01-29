@@ -75,6 +75,13 @@ getName str = Namer $ do
       St.put newMap
       return new
 
+lookupValueName :: String -> T.Q T.Name
+lookupValueName str = do
+  mayName <- T.lookupValueName str
+  case mayName of
+    Nothing -> fail $ "name not found: " ++ str
+    Just r -> return r
+
 namerNewName :: Namer T.Name
 namerNewName = Namer $ lift (T.newName "_namerNewName")
 
