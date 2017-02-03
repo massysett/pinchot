@@ -32,7 +32,15 @@ rule n = Rule n Nothing
 terminal
   :: RuleName
   -> T.Q (T.TExp (t -> Bool))
-  -- ^ Valid terminal symbols
+  -- ^ Valid terminal symbols.  This is a typed Template Haskell
+  -- expression.  To use it, make sure you have
+  --
+  -- > {-# LANGUAGE TemplateHaskell #-}
+  --
+  -- at the top of your module, and then use the Template Haskell
+  -- quotes, like this:
+  --
+  -- > terminal "AtoZ" [|| (\c -> c >= 'A' && c <= 'Z') ||]
   -> Rule t
 terminal n i = rule n (Terminal (Predicate i))
 
@@ -45,7 +53,7 @@ nonTerminal
   :: RuleName
   -- ^ Will be used for the name of the resulting type
   -> [(BranchName, [Rule t])]
-  -- ^ Branches of the non-terminal production rule.  This 'Seq'
+  -- ^ Branches of the non-terminal production rule.  This list
   -- must have at least one element; otherwise, an error will
   -- result.
   -> Rule t

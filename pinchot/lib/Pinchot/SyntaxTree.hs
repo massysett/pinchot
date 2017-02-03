@@ -1,6 +1,6 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE TemplateHaskell #-}
--- | Grower - grows the types to hold a syntax tree
+-- | Grows the types to hold a syntax tree.
 
 module Pinchot.SyntaxTree where
 

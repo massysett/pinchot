@@ -54,8 +54,6 @@ rulesToOptics qual termName
 -- * 'Record' gets a single 'Lens.Lens'
 --
 -- * 'Wrap', 'Opt', 'Star', and 'Plus' do not get optics.
---
--- TODO add prism for 'Series'
 ruleToOptics
   :: (Syntax.Lift t, Data t)
   => Qualifier

@@ -20,7 +20,7 @@ import Pinchot.Rules
 -- @t'RULE_NAME@ where @RULE_NAME@ is the name of the rule.  The
 -- type of the declaration is either
 --
--- Production a -> Seq (t, a)
+-- Production a -> [(t, a)]
 --
 -- or
 --
@@ -52,7 +52,7 @@ terminalizers qual
 -- the rule.  The
 -- type of the declaration is either
 --
--- Production a -> Seq (t, a)
+-- Production a -> [(t, a)]
 --
 -- or
 --
@@ -96,7 +96,7 @@ terminalizer qual rule@(Rule nm _ _) = sequence [sig, expn]
 -- | For the given rule, returns an expression that has type of
 -- either
 --
--- Production a -> Seq (t, a)
+-- Production a -> [(t, a)]
 --
 -- or
 --
@@ -145,7 +145,7 @@ lookupName lkp n = case Map.lookup n lkp of
 -- | For the given rule, returns an expression that has type
 -- of either
 --
--- Production a -> Seq (t, a)
+-- Production a -> [(t, a)]
 --
 -- or
 --
